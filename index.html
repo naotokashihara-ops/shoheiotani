@@ -161,11 +161,19 @@
     .stat-card.batting::before  { background: linear-gradient(90deg, #1f6feb, #58a6ff); }
     .stat-card.pitching::before { background: linear-gradient(90deg, #238636, #3fb950); }
     .stat-card:hover { transform: translateY(-2px); border-color: var(--muted); }
+    .card-header { display:flex; justify-content:space-between; align-items:flex-start; gap:4px; }
     .card-label { font-size: .7rem; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
     .card-value { font-size: 2rem; font-weight: 800; margin-top: 4px; line-height: 1; }
     .card-value.batting  { color: #79c0ff; }
     .card-value.pitching { color: #56d364; }
     .card-sub { font-size: .7rem; color: var(--muted); margin-top: 4px; }
+    .rank-badge { font-size:.62rem; font-weight:800; padding:2px 7px; border-radius:8px; white-space:nowrap; flex-shrink:0; margin-top:1px; }
+    .rank-1 { background:rgba(239,178,30,.25); color:#EFB21E; }
+    .rank-2 { background:rgba(192,192,192,.15); color:#c0c0c0; }
+    .rank-3 { background:rgba(205,127,50,.2); color:#cd7f32; }
+    .rank-n { background:rgba(139,148,158,.12); color:var(--muted); }
+    .card-leader { font-size:.63rem; color:var(--muted); margin-top:7px; padding-top:6px; border-top:1px solid var(--border); line-height:1.5; }
+    .card-leader strong { color:var(--text); }
 
     /* Skeleton */
     .skeleton {
@@ -618,31 +626,41 @@ function render(data, source) {
   document.getElementById('bannerGames').textContent  = bat.g;
   document.getElementById('bannerPitchG').textContent = pit.g;
 
-  // Cards
-  renderCards('battingCards', [
-    { label:'打率',   value: bat.avg,  sub: `${bat.g}試合`, type:'batting'  },
-    { label:'本塁打', value: bat.hr,   sub: 'HR',           type:'batting'  },
-    { label:'打点',   value: bat.rbi,  sub: 'RBI',          type:'batting'  },
-    { label:'安打',   value: bat.h,    sub: `${bat.ab}打数`, type:'batting' },
-    { label:'出塁率', value: bat.obp,  sub: 'OBP',          type:'batting'  },
-    { label:'長打率', value: bat.slg,  sub: 'SLG',          type:'batting'  },
-    { label:'OPS',    value: bat.ops,  sub: '出塁+長打',    type:'batting'  },
-    { label:'盗塁',   value: bat.sb,   sub: 'SB',           type:'batting'  },
-    { label:'得点',   value: bat.r,    sub: 'Runs',         type:'batting'  },
-    { label:'三振',   value: bat.so,   sub: 'SO',           type:'batting'  },
-    { label:'打席',   value: bat.pa,   sub: 'PA',           type:'batting'  },
-  ]);
+  // NL Rankings（非同期で取得して後からカードを更新）
+  const year = cs.year ?? new Date().getFullYear();
+  const BAT_STATS = [
+    { label:'打率',   value: bat.avg,  sub: `${bat.g}試合`,  type:'batting',  cat:'battingAverage'     },
+    { label:'本塁打', value: bat.hr,   sub: 'HR',            type:'batting',  cat:'homeRuns'           },
+    { label:'打点',   value: bat.rbi,  sub: 'RBI',           type:'batting',  cat:'rbi'                },
+    { label:'安打',   value: bat.h,    sub: `${bat.ab}打数`, type:'batting',  cat:'hits'               },
+    { label:'出塁率', value: bat.obp,  sub: 'OBP',           type:'batting',  cat:'onBasePercentage'   },
+    { label:'長打率', value: bat.slg,  sub: 'SLG',           type:'batting',  cat:'sluggingPercentage' },
+    { label:'OPS',    value: bat.ops,  sub: '出塁+長打',     type:'batting',  cat:'onBasePlusSlugging' },
+    { label:'盗塁',   value: bat.sb,   sub: 'SB',            type:'batting',  cat:'stolenBases'        },
+    { label:'得点',   value: bat.r,    sub: 'Runs',          type:'batting',  cat:'runs'               },
+    { label:'三振',   value: bat.so,   sub: 'SO',            type:'batting',  cat:null                 },
+    { label:'打席',   value: bat.pa,   sub: 'PA',            type:'batting',  cat:null                 },
+  ];
+  const PIT_STATS = [
+    { label:'防御率',  value: pit.era,  sub: 'ERA',           type:'pitching', cat:'earnedRunAverage'              },
+    { label:'勝利',    value: pit.w,    sub: `${pit.l}敗`,    type:'pitching', cat:'wins'                          },
+    { label:'登板',    value: pit.g,    sub: `先発${pit.gs}`, type:'pitching', cat:null                            },
+    { label:'投球回',  value: pit.ip,   sub: 'IP',            type:'pitching', cat:'inningsPitched'                },
+    { label:'奪三振',  value: pit.so,   sub: 'SO',            type:'pitching', cat:'pitchingStrikeouts'            },
+    { label:'与四球',  value: pit.bb,   sub: 'BB',            type:'pitching', cat:null                            },
+    { label:'被安打',  value: pit.h,    sub: 'H allowed',     type:'pitching', cat:null                            },
+    { label:'WHIP',    value: pit.whip, sub: '1投球回あたり', type:'pitching', cat:'walksAndHitsPerInningPitched'  },
+  ];
 
-  renderCards('pitchingCards', [
-    { label:'防御率',  value: pit.era,  sub: 'ERA',          type:'pitching' },
-    { label:'勝利',    value: pit.w,    sub: `${pit.l}敗`,   type:'pitching' },
-    { label:'登板',    value: pit.g,    sub: `先発${pit.gs}`, type:'pitching' },
-    { label:'投球回',  value: pit.ip,   sub: 'IP',           type:'pitching' },
-    { label:'奪三振',  value: pit.so,   sub: 'SO',           type:'pitching' },
-    { label:'与四球',  value: pit.bb,   sub: 'BB',           type:'pitching' },
-    { label:'被安打',  value: pit.h,    sub: 'H allowed',    type:'pitching' },
-    { label:'WHIP',    value: pit.whip, sub: '1投球回あたり', type:'pitching' },
-  ]);
+  // まず空のランキングで即時描画
+  renderCards('battingCards',  BAT_STATS);
+  renderCards('pitchingCards', PIT_STATS);
+
+  // ランキング取得後に再描画
+  fetchNLRankings(year).then(rankings => {
+    renderCards('battingCards',  BAT_STATS, rankings);
+    renderCards('pitchingCards', PIT_STATS, rankings);
+  });
 
   renderTable(currentTableMode, career);
   renderAwards();
@@ -650,15 +668,68 @@ function render(data, source) {
 }
 
 /* ══════════════════════════════════════
+   NL RANKINGS
+══════════════════════════════════════ */
+function shortName(full) {
+  const p = (full ?? '').split(' ');
+  return p.length < 2 ? full : p[0][0] + '.' + p.slice(1).join(' ');
+}
+
+async function fetchNLRankings(year) {
+  const base = `${MLB_BASE}/stats/leaders?season=${year}&leagueId=104&sportId=1&limit=50`;
+  const batCats = 'battingAverage,homeRuns,rbi,onBasePlusSlugging,onBasePercentage,sluggingPercentage,stolenBases,runs,hits';
+  const pitCats = 'earnedRunAverage,wins,pitchingStrikeouts,inningsPitched,walksAndHitsPerInningPitched';
+
+  try {
+    const [bData, pData] = await Promise.all([
+      fetch(`${base}&leaderCategories=${batCats}&statGroup=hitting`).then(r => r.json()),
+      fetch(`${base}&leaderCategories=${pitCats}&statGroup=pitching`).then(r => r.json()),
+    ]);
+
+    const rankings = {};
+    for (const group of [...(bData.leagueLeaders ?? []), ...(pData.leagueLeaders ?? [])]) {
+      const cat     = group.leaderCategory;
+      const leaders = group.leaders ?? [];
+      const top     = leaders[0];
+      const ohtani  = leaders.find(l => l.person?.id === 660271);
+      if (top) {
+        rankings[cat] = {
+          rank:   ohtani?.rank ?? null,
+          leader: { name: shortName(top.person?.fullName), value: top.value ?? '' },
+        };
+      }
+    }
+    return rankings;
+  } catch (e) {
+    console.warn('NL rankings fetch failed:', e.message);
+    return {};
+  }
+}
+
+/* ══════════════════════════════════════
    CARDS
 ══════════════════════════════════════ */
-function renderCards(id, stats) {
-  document.getElementById(id).innerHTML = stats.map(s => `
+function renderCards(id, stats, rankings = {}) {
+  document.getElementById(id).innerHTML = stats.map(s => {
+    const rk = s.cat ? rankings[s.cat] : null;
+    const rankClass = rk?.rank === 1 ? 'rank-1' : rk?.rank === 2 ? 'rank-2' : rk?.rank === 3 ? 'rank-3' : 'rank-n';
+    const rankHtml = rk?.rank
+      ? `<span class="rank-badge ${rankClass}">NL ${rk.rank}位</span>`
+      : '';
+    const leaderHtml = rk?.leader
+      ? `<div class="card-leader">1位: <strong>${rk.leader.name}</strong> ${rk.leader.value}</div>`
+      : '';
+    return `
     <div class="stat-card ${s.type}">
-      <div class="card-label">${s.label}</div>
+      <div class="card-header">
+        <div class="card-label">${s.label}</div>
+        ${rankHtml}
+      </div>
       <div class="card-value ${s.type}">${s.value}</div>
       <div class="card-sub">${s.sub}</div>
-    </div>`).join('');
+      ${leaderHtml}
+    </div>`;
+  }).join('');
 }
 
 /* ══════════════════════════════════════
