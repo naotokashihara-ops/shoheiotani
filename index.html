@@ -645,20 +645,14 @@ function render(data, source) {
     { label:'出塁率', value: bat.obp,  sub: 'OBP',           type:'batting',  cat:'onBasePercentage'   },
     { label:'長打率', value: bat.slg,  sub: 'SLG',           type:'batting',  cat:'sluggingPercentage' },
     { label:'OPS',    value: bat.ops,  sub: '出塁+長打',     type:'batting',  cat:'onBasePlusSlugging' },
-    { label:'盗塁',   value: bat.sb,   sub: 'SB',            type:'batting',  cat:'stolenBases'        },
     { label:'得点',   value: bat.r,    sub: 'Runs',          type:'batting',  cat:'runs'               },
-    { label:'三振',   value: bat.so,   sub: 'SO',            type:'batting',  cat:null                 },
-    { label:'打席',   value: bat.pa,   sub: 'PA',            type:'batting',  cat:null                 },
   ];
   const PIT_STATS = [
     { label:'防御率',  value: pit.era,  sub: 'ERA',           type:'pitching', cat:'earnedRunAverage'              },
-    { label:'勝利',    value: pit.w,    sub: `${pit.l}敗`,    type:'pitching', cat:'wins'                          },
-    { label:'登板',    value: pit.g,    sub: `先発${pit.gs}`, type:'pitching', cat:null                            },
-    { label:'投球回',  value: pit.ip,   sub: 'IP',            type:'pitching', cat:'inningsPitched'                },
-    { label:'奪三振',  value: pit.so,   sub: 'SO',            type:'pitching', cat:'pitchingStrikeouts'            },
-    { label:'与四球',  value: pit.bb,   sub: 'BB',            type:'pitching', cat:null                            },
-    { label:'被安打',  value: pit.h,    sub: 'H allowed',     type:'pitching', cat:null                            },
-    { label:'WHIP',    value: pit.whip, sub: '1投球回あたり', type:'pitching', cat:'walksAndHitsPerInningPitched'  },
+    { label:'勝利',    value: pit.w,    sub: `${pit.l}敗`,    type:'pitching', cat:'wins'                         },
+    { label:'投球回',  value: pit.ip,   sub: 'IP',            type:'pitching', cat:'inningsPitched'               },
+    { label:'奪三振',  value: pit.so,   sub: 'SO',            type:'pitching', cat:'strikeouts'                   },
+    { label:'WHIP',    value: pit.whip, sub: '1投球回あたり', type:'pitching', cat:'walksAndHitsPerInningPitched' },
   ];
 
   // まず空のランキングで即時描画
@@ -687,7 +681,7 @@ function shortName(full) {
 async function fetchNLRankings(year) {
   const base = `${MLB_BASE}/stats/leaders?season=${year}&leagueId=104&sportId=1&limit=50`;
   const batCats = 'battingAverage,homeRuns,runsBattedIn,onBasePlusSlugging,onBasePercentage,sluggingPercentage,stolenBases,runs,hits';
-  const pitCats = 'earnedRunAverage,wins,pitchingStrikeouts,inningsPitched,walksAndHitsPerInningPitched';
+  const pitCats = 'earnedRunAverage,wins,strikeouts,inningsPitched,walksAndHitsPerInningPitched';
 
   try {
     const [bData, pData] = await Promise.all([
