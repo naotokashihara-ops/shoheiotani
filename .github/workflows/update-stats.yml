@@ -1,0 +1,39 @@
+name: 📊 成績データ 毎日自動更新
+
+on:
+  # 毎日 UTC 6:00 (= 日本時間 15:00) に実行
+  schedule:
+    - cron: '0 6 * * *'
+  # 手動でも実行可能（GitHub の Actions タブから）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ① コードをチェックアウト
+        uses: actions/checkout@v4
+
+      - name: ② Node.js 20 をセットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: ③ MLB API から成績データ取得
+        run: node --input-type=module < scripts/fetch-stats.js
+
+      - name: ④ data.json をコミット & プッシュ
+        run: |
+          git config user.name  "ohtani-stats-bot"
+          git config user.email "action@github.com"
+          git add data.json
+          # 変更がある場合のみコミット
+          git diff --staged --quiet || \
+            git commit -m "📊 Stats auto-update: $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
+
+      - name: ⑤ 完了通知
+        run: echo "✅ 成績データを更新しました"

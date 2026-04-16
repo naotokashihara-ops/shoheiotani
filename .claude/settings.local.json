@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/naotokashihara/Desktop/shoheiotani status)",
+      "Bash(git --version)",
+      "Bash(gh --version)"
+    ]
+  }
+}

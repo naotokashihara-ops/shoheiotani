@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>大谷翔平 – 成績トラッカー</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --blue:   #005A9C;
+      --gold:   #EFB21E;
+      --bg:     #0d1117;
+      --card:   #161b22;
+      --card2:  #1c2230;
+      --border: #30363d;
+      --text:   #e6edf3;
+      --muted:  #8b949e;
+      --green:  #3fb950;
+      --red:    #f85149;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Loading overlay ── */
+    #loadingOverlay {
+      position: fixed; inset: 0; z-index: 999;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px; transition: opacity .4s;
+    }
+    #loadingOverlay.hidden { opacity: 0; pointer-events: none; }
+    .loading-logo {
+      font-size: 3rem; font-weight: 900; letter-spacing: .05em;
+      color: var(--gold);
+    }
+    .loading-bar {
+      width: 200px; height: 3px;
+      background: var(--border); border-radius: 2px; overflow: hidden;
+    }
+    .loading-bar-fill {
+      height: 100%; background: var(--gold);
+      border-radius: 2px;
+      animation: loadBar 1.2s ease-in-out forwards;
+    }
+    @keyframes loadBar { from { width:0% } to { width:100% } }
+    .loading-text { font-size: .8rem; color: var(--muted); }
+
+    /* ── Status bar ── */
+    #statusBar {
+      display: none;
+      background: rgba(248,81,73,0.15); border-bottom: 1px solid var(--red);
+      padding: 8px 24px; font-size: .78rem; color: var(--red); text-align: center;
+    }
+    #statusBar.live { background: rgba(63,185,80,0.1); border-color: var(--green); color: var(--green); }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #050e1f 0%, #001f4d 60%, #003087 100%);
+      border-bottom: 3px solid var(--gold);
+      padding: 28px 32px 24px;
+      display: flex; align-items: center; gap: 28px;
+      position: relative; overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Ccircle cx='30' cy='30' r='28' stroke='%23ffffff' stroke-width='0.8' stroke-opacity='0.04'/%3E%3Cpath d='M10 30 Q30 10 50 30 Q30 50 10 30Z' stroke='%23ffffff' stroke-width='0.4' stroke-opacity='0.04' fill='none'/%3E%3C/g%3E%3C/svg%3E") repeat;
+    }
+    .avatar {
+      width: 90px; height: 90px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold), #c8860a);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2.6rem; font-weight: 900; color: #001f4d;
+      box-shadow: 0 0 0 4px rgba(239,178,30,.35), 0 8px 32px rgba(0,0,0,.5);
+      flex-shrink: 0; position: relative; z-index: 1;
+    }
+    .header-info { position: relative; z-index: 1; }
+    .header-info h1 {
+      font-size: 2rem; font-weight: 800; letter-spacing: .05em;
+      text-shadow: 0 2px 12px rgba(0,0,0,.6);
+    }
+    .header-info h1 span { color: var(--gold); }
+    .header-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+    .badge {
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+      border-radius: 20px; padding: 3px 12px;
+      font-size: .75rem; color: #cdd9e5;
+    }
+    .badge.gold { background: rgba(239,178,30,.2); border-color: var(--gold); color: var(--gold); font-weight: 700; }
+    .header-right {
+      margin-left: auto; text-align: right;
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    }
+    .last-updated { font-size: .72rem; color: var(--muted); }
+    .refresh-btn {
+      background: var(--gold); color: #001f4d;
+      border: none; border-radius: 8px;
+      padding: 7px 16px; font-size: .8rem; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; gap: 6px;
+      transition: opacity .15s;
+    }
+    .refresh-btn:hover { opacity: .85; }
+    .refresh-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(0,0,0,.3); border-top-color: #001f4d;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Main ── */
+    main { max-width: 1280px; margin: 0 auto; padding: 28px 20px 60px; }
+
+    .section-title {
+      font-size: .72rem; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--gold);
+      margin-bottom: 14px; display: flex; align-items: center; gap: 10px;
+    }
+    .section-title::after {
+      content: ''; flex: 1; height: 1px;
+      background: linear-gradient(to right, var(--border), transparent);
+    }
+
+    /* ── Season Banner ── */
+    .season-banner {
+      background: linear-gradient(135deg, #001a3a, #002a5e);
+      border: 1px solid var(--gold); border-radius: 16px;
+      padding: 24px 28px; margin-bottom: 28px;
+      display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    }
+    .season-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--gold); text-transform: uppercase; }
+    .season-year  { font-size: 2.4rem; font-weight: 900; line-height: 1; }
+    .season-divider { width: 1px; height: 50px; background: var(--border); }
+    .banner-stat { text-align: center; }
+    .banner-stat-value { font-size: 1.8rem; font-weight: 900; line-height: 1; }
+    .banner-stat-label { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Stat Cards ── */
+    .cards-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px; margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 18px;
+      transition: transform .15s, border-color .15s;
+      position: relative; overflow: hidden;
+    }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .stat-card.batting::before  { background: linear-gradient(90deg, #1f6feb, #58a6ff); }
+    .stat-card.pitching::before { background: linear-gradient(90deg, #238636, #3fb950); }
+    .stat-card:hover { transform: translateY(-2px); border-color: var(--muted); }
+    .card-label { font-size: .7rem; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+    .card-value { font-size: 2rem; font-weight: 800; margin-top: 4px; line-height: 1; }
+    .card-value.batting  { color: #79c0ff; }
+    .card-value.pitching { color: #56d364; }
+    .card-sub { font-size: .7rem; color: var(--muted); margin-top: 4px; }
+
+    /* Skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--card2) 25%, var(--border) 50%, var(--card2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+      border-radius: 4px;
+    }
+    @keyframes shimmer { 0% { background-position:200% 0 } 100% { background-position:-200% 0 } }
+
+    /* ── Two-column ── */
+    .two-col {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 20px; margin-bottom: 28px;
+    }
+    @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px 22px;
+    }
+    .panel-title {
+      font-size: .85rem; font-weight: 700;
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 16px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot.blue  { background: #58a6ff; }
+    .dot.green { background: #3fb950; }
+    .dot.gold  { background: var(--gold); }
+
+    .chart-wrap { position: relative; height: 240px; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    thead th {
+      background: var(--card2); color: var(--muted);
+      font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      padding: 10px 14px; text-align: right;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    thead th:first-child, thead th:nth-child(2) { text-align: left; }
+    tbody tr { border-bottom: 1px solid rgba(48,54,61,.6); transition: background .1s; }
+    tbody tr:hover { background: var(--card2); }
+    tbody tr.current-season { background: rgba(239,178,30,.06); }
+    tbody tr.current-season td { color: var(--gold); }
+    td { padding: 9px 14px; text-align: right; white-space: nowrap; }
+    td:first-child { text-align: left; font-weight: 700; }
+    td:nth-child(2) { text-align: left; color: var(--muted); font-size: .76rem; }
+    .hl   { color: #79c0ff; font-weight: 700; }
+    .hl.g { color: #56d364; }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+    .tab {
+      padding: 6px 16px; border-radius: 8px; font-size: .8rem; font-weight: 600;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .tab.active { background: var(--gold); color: #001f4d; border-color: var(--gold); }
+
+    /* ── Progress bars ── */
+    .prog-row { margin-bottom: 14px; }
+    .prog-header { display: flex; justify-content: space-between; font-size: .78rem; margin-bottom: 5px; }
+    .prog-bar { height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .prog-fill { height: 100%; border-radius: 4px; width: 0%; transition: width .9s ease; }
+
+    /* ── Awards ── */
+    .awards-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px; margin-bottom: 28px;
+    }
+    .award-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 18px;
+      display: flex; align-items: flex-start; gap: 12px;
+    }
+    .award-icon { font-size: 1.6rem; flex-shrink: 0; }
+    .award-name { font-size: .82rem; font-weight: 700; }
+    .award-year { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Source badge ── */
+    .source-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.3);
+      border-radius: 20px; padding: 2px 10px;
+      font-size: .68rem; color: var(--green);
+    }
+    .source-badge.offline {
+      background: rgba(139,148,158,.1); border-color: rgba(139,148,158,.3);
+      color: var(--muted);
+    }
+
+    @media (max-width: 600px) {
+      header { padding: 18px 16px; gap: 16px; }
+      .header-info h1 { font-size: 1.4rem; }
+      .season-year { font-size: 1.8rem; }
+      main { padding: 18px 12px 40px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loadingOverlay">
+  <div class="loading-logo">⚾ 大谷 17</div>
+  <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+  <div class="loading-text">MLB 公式 API から成績を取得中…</div>
+</div>
+
+<!-- Status bar -->
+<div id="statusBar"></div>
+
+<!-- Header -->
+<header>
+  <div class="avatar">17</div>
+  <div class="header-info">
+    <h1>大谷 <span>翔平</span> <span style="font-size:1rem;color:#8b949e;font-weight:400">Shohei Ohtani</span></h1>
+    <div class="header-meta">
+      <span class="badge gold">二刀流 Two-Way Player</span>
+      <span class="badge">LAD #17</span>
+      <span class="badge">右投左打</span>
+      <span class="badge">193cm / 95kg</span>
+      <span class="badge">1994.07.05 (31歳)</span>
+    </div>
+    <div style="margin-top:8px" id="sourceIndicator"></div>
+  </div>
+  <div class="header-right">
+    <span class="last-updated" id="lastUpdated">読み込み中…</span>
+    <button class="refresh-btn" id="refreshBtn" onclick="loadData(true)">
+      <span id="refreshIcon">↻</span> 更新
+      <span class="spinner" id="spinner"></span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Season Banner -->
+  <div class="season-banner">
+    <div>
+      <div class="season-label">Current Season</div>
+      <div class="season-year" id="bannerYear">—</div>
+    </div>
+    <div class="season-divider"></div>
+    <div style="display:flex;gap:28px;flex-wrap:wrap">
+      <div class="banner-stat">
+        <div class="season-label" style="color:#79c0ff">⚾ 打率</div>
+        <div class="banner-stat-value" style="color:#79c0ff" id="bannerAvg">—</div>
+        <div class="banner-stat-label">AVG</div>
+      </div>
+      <div class="banner-stat">
+        <div class="season-label" style="color:#79c0ff">HR</div>
+        <div class="banner-stat-value" style="color:#79c0ff" id="bannerHR">—</div>
+        <div class="banner-stat-label">本塁打</div>
+      </div>
+      <div class="banner-stat">
+        <div class="season-label" style="color:#79c0ff">RBI</div>
+        <div class="banner-stat-value" style="color:#79c0ff" id="bannerRBI">—</div>
+        <div class="banner-stat-label">打点</div>
+      </div>
+      <div class="banner-stat">
+        <div class="season-label" style="color:#79c0ff">OPS</div>
+        <div class="banner-stat-value" style="color:#79c0ff" id="bannerOPS">—</div>
+        <div class="banner-stat-label">OPS</div>
+      </div>
+      <div class="season-divider"></div>
+      <div class="banner-stat">
+        <div class="season-label" style="color:#56d364">⚾ 防御率</div>
+        <div class="banner-stat-value" style="color:#56d364" id="bannerERA">—</div>
+        <div class="banner-stat-label">ERA</div>
+      </div>
+      <div class="banner-stat">
+        <div class="season-label" style="color:#56d364">W-L</div>
+        <div class="banner-stat-value" style="color:#56d364" id="bannerWL">—</div>
+        <div class="banner-stat-label">勝敗</div>
+      </div>
+      <div class="banner-stat">
+        <div class="season-label" style="color:#56d364">SO</div>
+        <div class="banner-stat-value" style="color:#56d364" id="bannerSO">—</div>
+        <div class="banner-stat-label">奪三振</div>
+      </div>
+      <div class="banner-stat">
+        <div class="season-label" style="color:#56d364">WHIP</div>
+        <div class="banner-stat-value" style="color:#56d364" id="bannerWHIP">—</div>
+        <div class="banner-stat-label">WHIP</div>
+      </div>
+    </div>
+    <div style="margin-left:auto;font-size:.72rem;color:var(--muted)">
+      <span id="bannerGames">—</span> 試合 / <span id="bannerPitchG">—</span> 登板
+    </div>
+  </div>
+
+  <!-- Batting Cards -->
+  <p class="section-title">⚾ 今シーズン 打撃成績</p>
+  <div class="cards-grid" id="battingCards"></div>
+
+  <!-- Pitching Cards -->
+  <p class="section-title">⚾ 今シーズン 投球成績</p>
+  <div class="cards-grid" id="pitchingCards"></div>
+
+  <!-- Charts -->
+  <p class="section-title">📈 キャリア推移</p>
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-title"><div class="dot blue"></div>本塁打 / 打率 推移</div>
+      <div class="chart-wrap"><canvas id="hrChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><div class="dot green"></div>防御率 / 奪三振 推移</div>
+      <div class="chart-wrap"><canvas id="eraChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-title"><div class="dot gold"></div>今シーズン パフォーマンス指標</div>
+      <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><div class="dot blue"></div>打撃指標ランキング</div>
+      <div id="progressBars"></div>
+    </div>
+  </div>
+
+  <!-- Career Table -->
+  <p class="section-title" style="margin-top:28px">📋 年度別成績</p>
+  <div class="panel">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('batting', this)">打撃成績</button>
+      <button class="tab" onclick="switchTab('pitching', this)">投球成績</button>
+    </div>
+    <div class="table-wrap" id="careerTable"></div>
+  </div>
+
+  <!-- Awards -->
+  <p class="section-title" style="margin-top:28px">🏆 受賞歴・タイトル</p>
+  <div class="awards-grid" id="awardsGrid"></div>
+
+</main>
+
+<script>
+/* ══════════════════════════════════════
+   STATIC FALLBACK DATA (2026-04-16 時点)
+══════════════════════════════════════ */
+const FALLBACK = {
+  lastUpdated: '2026-04-16T06:00:00Z',
+  currentSeason: {
+    year: 2026,
+    batting:  { avg:'.254', g:18, ab:63,  h:16, hr:5,  rbi:10, r:10, so:19, sb:2,  pa:82,  obp:'.350', slg:'.540', ops:'.890' },
+    pitching: { era:'0.50', g:3,  gs:3,   w:2,  l:0,   ip:'18.0', so:18, bb:6, h:7, whip:'0.72' },
+  },
+  career: {
+    batting: [
+      { year:'2018', team:'エンゼルス', avg:.285, g:104, ab:326, h:93,  hr:22, rbi:61,  r:59,  so:102, sb:10, obp:.361, slg:.564, ops:.925, pa:367 },
+      { year:'2019', team:'エンゼルス', avg:.286, g:106, ab:384, h:110, hr:18, rbi:62,  r:51,  so:110, sb:12, obp:.343, slg:.505, ops:.848, pa:425 },
+      { year:'2020', team:'エンゼルス', avg:.190, g:44,  ab:153, h:29,  hr:7,  rbi:24,  r:23,  so:50,  sb:7,  obp:.291, slg:.366, ops:.657, pa:175 },
+      { year:'2021', team:'エンゼルス', avg:.257, g:158, ab:537, h:138, hr:46, rbi:100, r:103, so:189, sb:26, obp:.372, slg:.592, ops:.965, pa:639 },
+      { year:'2022', team:'エンゼルス', avg:.273, g:157, ab:586, h:160, hr:34, rbi:95,  r:90,  so:161, sb:11, obp:.356, slg:.519, ops:.875, pa:666 },
+      { year:'2023', team:'エンゼルス', avg:.304, g:135, ab:497, h:151, hr:44, rbi:95,  r:102, so:143, sb:20, obp:.412, slg:.654, ops:1.066,pa:599 },
+      { year:'2024', team:'ドジャース', avg:.310, g:159, ab:636, h:197, hr:54, rbi:130, r:134, so:162, sb:59, obp:.390, slg:.646, ops:1.036,pa:731 },
+      { year:'2025', team:'ドジャース', avg:.282, g:158, ab:611, h:172, hr:55, rbi:102, r:108, so:187, sb:40, obp:.374, slg:.597, ops:.971, pa:699 },
+      { year:'2026', team:'ドジャース', avg:.254, g:18,  ab:63,  h:16,  hr:5,  rbi:10,  r:10,  so:19,  sb:2,  obp:.350, slg:.540, ops:.890, pa:82,  current:true },
+    ],
+    pitching: [
+      { year:'2018', team:'エンゼルス', era:3.31,  g:10, gs:10, w:4,  l:2, ip:'51.2',  so:63,  bb:22, h:38,  whip:1.16 },
+      { year:'2020', team:'エンゼルス', era:37.80, g:2,  gs:2,  w:0,  l:1, ip:'1.2',   so:3,   bb:5,  h:6,   whip:6.60 },
+      { year:'2021', team:'エンゼルス', era:3.18,  g:23, gs:23, w:9,  l:2, ip:'130.1', so:156, bb:44, h:99,  whip:1.09 },
+      { year:'2022', team:'エンゼルス', era:2.33,  g:28, gs:28, w:15, l:9, ip:'166.0', so:219, bb:44, h:129, whip:1.01 },
+      { year:'2023', team:'エンゼルス', era:3.14,  g:23, gs:23, w:10, l:5, ip:'132.0', so:167, bb:55, h:102, whip:1.19 },
+      { year:'2025', team:'ドジャース', era:2.87,  g:14, gs:14, w:1,  l:1, ip:'47.0',  so:62,  bb:22, h:38,  whip:1.28 },
+      { year:'2026', team:'ドジャース', era:0.50,  g:3,  gs:3,  w:2,  l:0, ip:'18.0',  so:18,  bb:6,  h:7,   whip:0.72, current:true },
+    ],
+  },
+};
+
+const AWARDS = [
+  { icon:'🏆', name:'MVP (AL)', years:'2021, 2023' },
+  { icon:'🏆', name:'MVP (NL)', years:'2024, 2025' },
+  { icon:'🌟', name:'AL 新人王', years:'2018' },
+  { icon:'⚾', name:'MLB オールスター', years:'2021–2025' },
+  { icon:'🥇', name:'WBC 優勝 (MVP)', years:'2023' },
+  { icon:'💍', name:'ワールドシリーズ優勝', years:'2024, 2025' },
+  { icon:'🏅', name:'本塁打王', years:'2024 (54HR), 2025 (55HR)' },
+  { icon:'📜', name:'シルバースラッガー賞', years:'2021–2024' },
+  { icon:'🎯', name:'ゴールドグラブ賞', years:'2023, 2024' },
+  { icon:'👑', name:'二刀流 全MLB選出', years:'2021, 2022' },
+];
+
+/* ══════════════════════════════════════
+   MLB STATS API
+══════════════════════════════════════ */
+const MLB_ID   = 660271;
+const MLB_BASE = 'https://statsapi.mlb.com/api/v1';
+const TEAM_JA  = { 'Los Angeles Angels':'エンゼルス', 'Los Angeles Dodgers':'ドジャース' };
+const toJa = n => TEAM_JA[n] ?? n;
+
+let hrChartInst = null, eraChartInst = null, radarChartInst = null;
+let currentTableMode = 'batting';
+
+async function fetchMLB() {
+  const year = new Date().getFullYear();
+  const [b, p, cb, cp] = await Promise.all([
+    fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=season&season=${year}&group=hitting&sportId=1`).then(r => r.json()),
+    fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=season&season=${year}&group=pitching&sportId=1`).then(r => r.json()),
+    fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=yearByYear&group=hitting&sportId=1`).then(r => r.json()),
+    fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=yearByYear&group=pitching&sportId=1`).then(r => r.json()),
+  ]);
+
+  const bat = b.stats[0]?.splits[0]?.stat ?? {};
+  const pit = p.stats[0]?.splits[0]?.stat ?? {};
+
+  const fmt = v => (typeof v === 'number' ? v.toFixed(3) : v) || '0';
+
+  return {
+    lastUpdated: new Date().toISOString(),
+    currentSeason: {
+      year,
+      batting: {
+        avg: bat.avg ?? '.---', g: bat.gamesPlayed ?? 0,
+        ab: bat.atBats ?? 0, h: bat.hits ?? 0,
+        hr: bat.homeRuns ?? 0, rbi: bat.rbi ?? 0,
+        r: bat.runs ?? 0, so: bat.strikeOuts ?? 0,
+        sb: bat.stolenBases ?? 0, pa: bat.plateAppearances ?? 0,
+        obp: bat.obp ?? '.---', slg: bat.slg ?? '.---', ops: bat.ops ?? '.---',
+      },
+      pitching: {
+        era: bat.era ?? pit.era ?? '-.--',
+        g: pit.gamesPlayed ?? 0, gs: pit.gamesStarted ?? 0,
+        w: pit.wins ?? 0, l: pit.losses ?? 0,
+        ip: pit.inningsPitched ?? '0.0',
+        so: pit.strikeOuts ?? 0, bb: pit.baseOnBalls ?? 0,
+        h: pit.hits ?? 0, whip: pit.whip ?? '-.--',
+      },
+    },
+    career: {
+      batting: (cb.stats[0]?.splits ?? [])
+        .filter(s => +s.season >= 2018)
+        .map(s => ({
+          year: s.season, team: toJa(s.team?.name ?? ''),
+          avg: +s.stat.avg, g: s.stat.gamesPlayed ?? 0,
+          ab: s.stat.atBats ?? 0, h: s.stat.hits ?? 0,
+          hr: s.stat.homeRuns ?? 0, rbi: s.stat.rbi ?? 0,
+          r: s.stat.runs ?? 0, so: s.stat.strikeOuts ?? 0,
+          sb: s.stat.stolenBases ?? 0, pa: s.stat.plateAppearances ?? 0,
+          obp: +s.stat.obp, slg: +s.stat.slg, ops: +s.stat.ops,
+        })),
+      pitching: (cp.stats[0]?.splits ?? [])
+        .filter(s => +s.season >= 2018)
+        .map(s => ({
+          year: s.season, team: toJa(s.team?.name ?? ''),
+          era: +s.stat.era, g: s.stat.gamesPlayed ?? 0,
+          gs: s.stat.gamesStarted ?? 0, w: s.stat.wins ?? 0, l: s.stat.losses ?? 0,
+          ip: s.stat.inningsPitched ?? '0', so: s.stat.strikeOuts ?? 0,
+          bb: s.stat.baseOnBalls ?? 0, h: s.stat.hits ?? 0, whip: +s.stat.whip,
+        })),
+    },
+  };
+}
+
+/* ══════════════════════════════════════
+   MAIN LOAD
+══════════════════════════════════════ */
+let lastData = null;
+
+async function loadData(manual = false) {
+  const btn     = document.getElementById('refreshBtn');
+  const spinner = document.getElementById('spinner');
+  const icon    = document.getElementById('refreshIcon');
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+  icon.style.display    = 'none';
+
+  let data, source;
+
+  try {
+    // 1) Try data.json (GitHub Pages キャッシュ)
+    const res = await fetch('./data.json?t=' + Date.now());
+    if (res.ok) {
+      data = await res.json();
+      source = 'cache';
+    } else throw new Error('no data.json');
+  } catch {
+    try {
+      // 2) MLB 公式 API から直接取得
+      data = await fetchMLB();
+      source = 'live';
+    } catch (e) {
+      // 3) 静的フォールバック
+      data = FALLBACK;
+      source = 'fallback';
+      showStatus(`⚠️ ネットワークエラー: スタティックデータを表示しています (${e.message})`, 'error');
+    }
+  }
+
+  lastData = data;
+  render(data, source);
+
+  btn.disabled = false;
+  spinner.style.display = 'none';
+  icon.style.display    = 'inline';
+}
+
+/* ══════════════════════════════════════
+   STATUS BAR
+══════════════════════════════════════ */
+function showStatus(msg, type = 'live') {
+  const bar = document.getElementById('statusBar');
+  bar.textContent = msg;
+  bar.className = type === 'live' ? 'live' : '';
+  bar.style.display = 'block';
+  if (type === 'live') setTimeout(() => { bar.style.display = 'none'; }, 4000);
+}
+
+/* ══════════════════════════════════════
+   RENDER
+══════════════════════════════════════ */
+function render(data, source) {
+  const { currentSeason: cs, career } = data;
+  const bat = cs.batting;
+  const pit = cs.pitching;
+  const curYear = cs.year ?? new Date().getFullYear();
+
+  // Mark career rows as current
+  if (career.batting.length)  career.batting[career.batting.length - 1].current   = true;
+  if (career.pitching.length) career.pitching[career.pitching.length - 1].current = true;
+
+  // Last updated
+  const d = new Date(data.lastUpdated);
+  document.getElementById('lastUpdated').textContent =
+    '最終更新: ' + d.toLocaleString('ja-JP', { timeZone:'Asia/Tokyo', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) + ' JST';
+
+  // Source badge
+  const srcEl = document.getElementById('sourceIndicator');
+  const srcLabels = { live:'● MLB 公式 API (ライブ)', cache:'● data.json (自動更新)', fallback:'● スタティックデータ' };
+  srcEl.innerHTML = `<span class="source-badge ${source==='fallback'?'offline':''}">${srcLabels[source]??source}</span>`;
+
+  // Banner
+  document.getElementById('bannerYear').textContent  = curYear;
+  document.getElementById('bannerAvg').textContent   = bat.avg;
+  document.getElementById('bannerHR').textContent    = bat.hr;
+  document.getElementById('bannerRBI').textContent   = bat.rbi;
+  document.getElementById('bannerOPS').textContent   = bat.ops;
+  document.getElementById('bannerERA').textContent   = pit.era;
+  document.getElementById('bannerWL').textContent    = `${pit.w}-${pit.l}`;
+  document.getElementById('bannerSO').textContent    = pit.so;
+  document.getElementById('bannerWHIP').textContent  = pit.whip;
+  document.getElementById('bannerGames').textContent  = bat.g;
+  document.getElementById('bannerPitchG').textContent = pit.g;
+
+  // Cards
+  renderCards('battingCards', [
+    { label:'打率',   value: bat.avg,  sub: `${bat.g}試合`, type:'batting'  },
+    { label:'本塁打', value: bat.hr,   sub: 'HR',           type:'batting'  },
+    { label:'打点',   value: bat.rbi,  sub: 'RBI',          type:'batting'  },
+    { label:'安打',   value: bat.h,    sub: `${bat.ab}打数`, type:'batting' },
+    { label:'出塁率', value: bat.obp,  sub: 'OBP',          type:'batting'  },
+    { label:'長打率', value: bat.slg,  sub: 'SLG',          type:'batting'  },
+    { label:'OPS',    value: bat.ops,  sub: '出塁+長打',    type:'batting'  },
+    { label:'盗塁',   value: bat.sb,   sub: 'SB',           type:'batting'  },
+    { label:'得点',   value: bat.r,    sub: 'Runs',         type:'batting'  },
+    { label:'三振',   value: bat.so,   sub: 'SO',           type:'batting'  },
+    { label:'打席',   value: bat.pa,   sub: 'PA',           type:'batting'  },
+  ]);
+
+  renderCards('pitchingCards', [
+    { label:'防御率',  value: pit.era,  sub: 'ERA',          type:'pitching' },
+    { label:'勝利',    value: pit.w,    sub: `${pit.l}敗`,   type:'pitching' },
+    { label:'登板',    value: pit.g,    sub: `先発${pit.gs}`, type:'pitching' },
+    { label:'投球回',  value: pit.ip,   sub: 'IP',           type:'pitching' },
+    { label:'奪三振',  value: pit.so,   sub: 'SO',           type:'pitching' },
+    { label:'与四球',  value: pit.bb,   sub: 'BB',           type:'pitching' },
+    { label:'被安打',  value: pit.h,    sub: 'H allowed',    type:'pitching' },
+    { label:'WHIP',    value: pit.whip, sub: '1投球回あたり', type:'pitching' },
+  ]);
+
+  renderTable(currentTableMode, career);
+  renderAwards();
+  renderProgress(bat, pit);
+  renderCharts(career);
+}
+
+/* ══════════════════════════════════════
+   CARDS
+══════════════════════════════════════ */
+function renderCards(id, stats) {
+  document.getElementById(id).innerHTML = stats.map(s => `
+    <div class="stat-card ${s.type}">
+      <div class="card-label">${s.label}</div>
+      <div class="card-value ${s.type}">${s.value}</div>
+      <div class="card-sub">${s.sub}</div>
+    </div>`).join('');
+}
+
+/* ══════════════════════════════════════
+   TABLES
+══════════════════════════════════════ */
+function switchTab(mode, btn) {
+  currentTableMode = mode;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  if (lastData) renderTable(mode, lastData.career);
+}
+
+function renderTable(mode, career) {
+  const el = document.getElementById('careerTable');
+  if (mode === 'batting') {
+    el.innerHTML = `<table><thead><tr>
+      <th>年度</th><th>チーム</th>
+      <th>試合</th><th>打率</th><th>打数</th><th>安打</th>
+      <th>本塁打</th><th>打点</th><th>得点</th>
+      <th>出塁率</th><th>長打率</th><th>OPS</th><th>三振</th><th>盗塁</th>
+    </tr></thead><tbody>${career.batting.map(r => `
+      <tr class="${r.current?'current-season':''}">
+        <td>${r.year}${r.current?' ★':''}</td>
+        <td>${r.team}</td>
+        <td>${r.g}</td>
+        <td class="hl">${typeof r.avg === 'number' ? r.avg.toFixed(3) : r.avg}</td>
+        <td>${r.ab}</td><td>${r.h}</td>
+        <td class="hl">${r.hr}</td>
+        <td>${r.rbi}</td><td>${r.r}</td>
+        <td>${typeof r.obp === 'number' ? r.obp.toFixed(3) : r.obp}</td>
+        <td>${typeof r.slg === 'number' ? r.slg.toFixed(3) : r.slg}</td>
+        <td class="hl">${typeof r.ops === 'number' ? r.ops.toFixed(3) : r.ops}</td>
+        <td>${r.so}</td><td>${r.sb}</td>
+      </tr>`).join('')}</tbody></table>`;
+  } else {
+    el.innerHTML = `<table><thead><tr>
+      <th>年度</th><th>チーム</th>
+      <th>登板</th><th>先発</th><th>勝</th><th>敗</th>
+      <th>防御率</th><th>投球回</th><th>奪三振</th>
+      <th>与四球</th><th>被安打</th><th>WHIP</th>
+    </tr></thead><tbody>${career.pitching.map(r => `
+      <tr class="${r.current?'current-season':''}">
+        <td>${r.year}${r.current?' ★':''}</td>
+        <td>${r.team}</td>
+        <td>${r.g}</td><td>${r.gs}</td>
+        <td>${r.w}</td><td>${r.l}</td>
+        <td class="hl g">${typeof r.era === 'number' ? r.era.toFixed(2) : r.era}</td>
+        <td>${r.ip}</td>
+        <td class="hl g">${r.so}</td>
+        <td>${r.bb}</td><td>${r.h}</td>
+        <td class="hl g">${typeof r.whip === 'number' ? r.whip.toFixed(2) : r.whip}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+}
+
+/* ══════════════════════════════════════
+   AWARDS
+══════════════════════════════════════ */
+function renderAwards() {
+  document.getElementById('awardsGrid').innerHTML = AWARDS.map(a => `
+    <div class="award-card">
+      <div class="award-icon">${a.icon}</div>
+      <div><div class="award-name">${a.name}</div><div class="award-year">${a.years}</div></div>
+    </div>`).join('');
+}
+
+/* ══════════════════════════════════════
+   PROGRESS BARS
+══════════════════════════════════════ */
+function pct(val, max) { return Math.min(100, Math.round((+val / max) * 100)); }
+
+function renderProgress(bat, pit) {
+  const items = [
+    { label:`打率 ${bat.avg}`, p: pct(+(bat.avg || 0), 0.35) * 1,  raw: bat.avg,  color:'#58a6ff', note:'MLB 平均 ~.250' },
+    { label:`OPS ${bat.ops}`,  p: pct(+(bat.ops || 0), 1.1)  * 1,  raw: bat.ops,  color:'#79c0ff', note:'1.100 = 超エリート' },
+    { label:`本塁打 ${bat.hr}`,p: pct(bat.hr, 60),                  raw: bat.hr,   color:'#d2a679', note:'60 = 歴史的レベル' },
+    { label:`OBP ${bat.obp}`,  p: pct(+(bat.obp || 0), 0.45),       raw: bat.obp,  color:'#a5d6ff', note:'出塁率' },
+    { label:`防御率 ${pit.era}`,p: pit.era !== '-.--' ? Math.max(0, 100 - pct(+pit.era, 5) * 1.2) : 0, raw: pit.era, color:'#56d364', note:'低いほど良' },
+    { label:`奪三振 ${pit.so}`, p: pct(pit.so, 200),                raw: pit.so,   color:'#3fb950', note:'シーズン 200K 目安' },
+  ];
+  document.getElementById('progressBars').innerHTML = items.map(it => `
+    <div class="prog-row">
+      <div class="prog-header">
+        <span>${it.label}</span>
+        <span style="color:var(--muted);font-size:.7rem">${it.note}</span>
+      </div>
+      <div class="prog-bar">
+        <div class="prog-fill" style="background:${it.color}" data-pct="${it.p}"></div>
+      </div>
+    </div>`).join('');
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.prog-fill').forEach(el => { el.style.width = el.dataset.pct + '%'; });
+  });
+}
+
+/* ══════════════════════════════════════
+   CHARTS
+══════════════════════════════════════ */
+function renderCharts(career) {
+  if (hrChartInst)    { hrChartInst.destroy();    hrChartInst    = null; }
+  if (eraChartInst)   { eraChartInst.destroy();   eraChartInst   = null; }
+  if (radarChartInst) { radarChartInst.destroy();  radarChartInst = null; }
+
+  const bLabels = career.batting.map(d => d.year);
+  const hrs     = career.batting.map(d => d.hr);
+  const avgs    = career.batting.map(d => Math.round((+d.avg || 0) * 1000));
+
+  hrChartInst = new Chart(document.getElementById('hrChart'), {
+    type: 'bar',
+    data: {
+      labels: bLabels,
+      datasets: [
+        { type:'bar',  label:'本塁打', data: hrs,  backgroundColor:'rgba(89,161,255,.55)', borderColor:'#58a6ff', borderWidth:1.5, borderRadius:4, yAxisID:'y' },
+        { type:'line', label:'打率×1000', data: avgs, borderColor:'#EFB21E', backgroundColor:'rgba(239,178,30,.1)', borderWidth:2, pointRadius:4, pointBackgroundColor:'#EFB21E', tension:.35, yAxisID:'y1' },
+      ],
+    },
+    options: chartOpts({
+      y:  { title:'本塁打', color:'#58a6ff' },
+      y1: { title:'打率×1000', color:'#EFB21E' },
+    }),
+  });
+
+  const pitFiltered = career.pitching.filter(d => +d.era < 10);
+  eraChartInst = new Chart(document.getElementById('eraChart'), {
+    type: 'line',
+    data: {
+      labels: pitFiltered.map(d => d.year),
+      datasets: [
+        { label:'防御率', data: pitFiltered.map(d => +d.era), borderColor:'#56d364', backgroundColor:'rgba(86,211,100,.12)', borderWidth:2.5, pointRadius:5, pointBackgroundColor:'#56d364', tension:.35, fill:true, yAxisID:'y' },
+        { label:'奪三振', data: pitFiltered.map(d => d.so),   borderColor:'#a5d6ff', borderWidth:2, pointRadius:4, pointBackgroundColor:'#a5d6ff', tension:.35, borderDash:[4,3], yAxisID:'y1' },
+      ],
+    },
+    options: chartOpts({
+      y:  { title:'防御率 (低いほど良)', color:'#56d364', reverse:true },
+      y1: { title:'奪三振', color:'#a5d6ff' },
+    }),
+  });
+
+  const cs = lastData?.currentSeason;
+  const bat = cs?.batting ?? {};
+  const pit = cs?.pitching ?? {};
+
+  radarChartInst = new Chart(document.getElementById('radarChart'), {
+    type: 'radar',
+    data: {
+      labels: ['打率', '本塁打', '打点', '防御率', '奪三振', 'WHIP'],
+      datasets: [
+        {
+          label: `${cs?.year ?? '今'} シーズン`,
+          data: [
+            pct(+(bat.avg||0), .350),
+            pct(bat.hr, 60),
+            pct(bat.rbi, 130),
+            bat.era !== '-.--' ? Math.max(0, 100 - pct(+pit.era, 5) * 1.2) : 0,
+            pct(pit.so, 200),
+            pit.whip !== '-.--' ? Math.max(0, 100 - pct(+pit.whip, 2) * 1.2) : 0,
+          ],
+          backgroundColor:'rgba(239,178,30,.18)', borderColor:'#EFB21E',
+          borderWidth:2.5, pointBackgroundColor:'#EFB21E', pointRadius:4,
+        },
+        {
+          label:'2024 (キャリアハイ)',
+          data:[95, 100, 100, 80, 85, 82],
+          backgroundColor:'rgba(89,161,255,.1)', borderColor:'#58a6ff',
+          borderWidth:2, borderDash:[4,3], pointBackgroundColor:'#58a6ff', pointRadius:3,
+        },
+      ],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:11} } } },
+      scales:{ r:{ min:0, max:100, ticks:{color:'transparent',backdropColor:'transparent',stepSize:25},
+        grid:{color:'rgba(48,54,61,.6)'}, angleLines:{color:'rgba(48,54,61,.6)'},
+        pointLabels:{color:'#8b949e',font:{size:11}} } },
+    },
+  });
+}
+
+function chartOpts({ y, y1 }) {
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:11} } } },
+    scales: {
+      x: { ticks:{color:'#8b949e'}, grid:{color:'rgba(48,54,61,.5)'} },
+      y: {
+        reverse: y.reverse ?? false,
+        ticks:{ color: y.color }, grid:{ color:'rgba(48,54,61,.5)' },
+        title:{ display:true, text: y.title, color: y.color, font:{size:10} },
+      },
+      y1: {
+        position:'right',
+        ticks:{ color: y1.color }, grid:{ drawOnChartArea:false },
+        title:{ display:true, text: y1.title, color: y1.color, font:{size:10} },
+      },
+    },
+  };
+}
+
+/* ══════════════════════════════════════
+   INIT
+══════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', async () => {
+  await loadData();
+
+  // Loading overlay を非表示
+  const ov = document.getElementById('loadingOverlay');
+  ov.classList.add('hidden');
+  setTimeout(() => { ov.style.display = 'none'; }, 450);
+
+  // 1 時間ごとに自動更新
+  setInterval(() => loadData(), 60 * 60 * 1000);
+});
+</script>
+</body>
+</html>
