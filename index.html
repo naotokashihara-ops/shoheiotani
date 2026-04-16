@@ -685,6 +685,8 @@ function render(data, source) {
     { label:'本塁打', value: bat.hr,   sub: 'HR',            type:'batting',  cat:'homeRuns'           },
     { label:'打点',   value: bat.rbi,  sub: 'RBI',           type:'batting',  cat:'runsBattedIn'       },
     { label:'安打',   value: bat.h,    sub: `${bat.ab}打数`, type:'batting',  cat:'hits'               },
+    { label:'出塁率', value: bat.obp,  sub: 'OBP',           type:'batting',  cat:'onBasePercentage'   },
+    { label:'長打率', value: bat.slg,  sub: 'SLG',           type:'batting',  cat:'sluggingPercentage' },
     { label:'OPS',    value: bat.ops,  sub: '出塁+長打',     type:'batting',  cat:'onBasePlusSlugging' },
     { label:'得点',   value: bat.r,    sub: 'Runs',          type:'batting',  cat:'runs'               },
   ];
