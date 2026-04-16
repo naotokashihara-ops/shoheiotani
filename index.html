@@ -797,11 +797,13 @@ async function fetchNLRankings(year) {
       const cat     = group.leaderCategory;
       const leaders = group.leaders ?? [];
       const top     = leaders[0];
+      const second  = leaders[1];
       const ohtani  = leaders.find(l => l.person?.id === 660271);
       if (top) {
         rankings[cat] = {
           rank:   ohtani?.rank ?? null,
-          leader: { name: shortName(top.person?.fullName), value: top.value ?? '' },
+          leader: { name: shortName(top.person?.fullName),    value: top.value    ?? '' },
+          second: second ? { name: shortName(second.person?.fullName), value: second.value ?? '' } : null,
         };
       }
     }
@@ -822,8 +824,11 @@ function renderCards(id, stats, rankings = {}) {
     const rankHtml = rk?.rank
       ? `<span class="rank-badge ${rankClass}">NL ${rk.rank}位</span>`
       : '';
-    const leaderHtml = rk?.leader
-      ? `<div class="card-leader">1位: <strong>${rk.leader.name}</strong> ${rk.leader.value}</div>`
+    const isFirst     = rk?.rank === 1;
+    const showEntry   = isFirst ? rk?.second : rk?.leader;
+    const showLabel   = isFirst ? '2位' : '1位';
+    const leaderHtml  = showEntry
+      ? `<div class="card-leader">${showLabel}: <strong>${showEntry.name}</strong> ${showEntry.value}</div>`
       : '';
     return `
     <div class="stat-card ${s.type}">
