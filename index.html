@@ -719,11 +719,18 @@ function render(data, source) {
 const NL_WEST_ID  = 203;
 const DODGERS_ID  = 119;
 const TEAM_SHORT  = {
-  'Los Angeles Dodgers':  '★ LAドジャース',
+  // フルネーム
+  'Los Angeles Dodgers':  'LAドジャース',
   'San Diego Padres':     'SDパドレス',
   'San Francisco Giants': 'SFジャイアンツ',
   'Arizona Diamondbacks': 'AZダイヤモンドバックス',
   'Colorado Rockies':     'COロッキーズ',
+  // API短縮名
+  'Dodgers':   'LAドジャース',
+  'Padres':    'SDパドレス',
+  'Giants':    'SFジャイアンツ',
+  'D-backs':   'AZダイヤモンドバックス',
+  'Rockies':   'COロッキーズ',
 };
 
 async function fetchStandings(year) {
