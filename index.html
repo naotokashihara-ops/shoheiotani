@@ -183,6 +183,13 @@
     }
     @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
 
+    /* ── 4-chart grid ── */
+    .charts-4grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px; margin-bottom: 28px;
+    }
+    @media (max-width: 700px) { .charts-4grid { grid-template-columns: 1fr; } }
+
     .panel {
       background: var(--card); border: 1px solid var(--border);
       border-radius: 14px; padding: 20px 22px;
@@ -368,27 +375,25 @@
   <p class="section-title">⚾ 今シーズン 投球成績</p>
   <div class="cards-grid" id="pitchingCards"></div>
 
-  <!-- Charts -->
-  <p class="section-title">📈 キャリア推移</p>
-  <div class="two-col">
+  <!-- 2026 日々の推移 -->
+  <p class="section-title">📊 2026 シーズン 日々の推移</p>
+  <div id="trendMsg" style="text-align:center;padding:12px;font-size:.8rem;color:var(--muted);display:none"></div>
+  <div class="charts-4grid">
     <div class="panel">
-      <div class="panel-title"><div class="dot blue"></div>本塁打 / 打率 推移</div>
-      <div class="chart-wrap"><canvas id="hrChart"></canvas></div>
+      <div class="panel-title"><div class="dot blue"></div>打率 / OPS</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="trendAvgOps"></canvas></div>
     </div>
     <div class="panel">
-      <div class="panel-title"><div class="dot green"></div>防御率 / 奪三振 推移</div>
-      <div class="chart-wrap"><canvas id="eraChart"></canvas></div>
-    </div>
-  </div>
-
-  <div class="two-col">
-    <div class="panel">
-      <div class="panel-title"><div class="dot gold"></div>今シーズン パフォーマンス指標</div>
-      <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+      <div class="panel-title"><div class="dot blue" style="background:#d2a679"></div>本塁打 / 打点</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="trendHrRbi"></canvas></div>
     </div>
     <div class="panel">
-      <div class="panel-title"><div class="dot blue"></div>打撃指標ランキング</div>
-      <div id="progressBars"></div>
+      <div class="panel-title"><div class="dot green"></div>防御率 / WHIP</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="trendEraWhip"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><div class="dot green" style="background:#a5d6ff"></div>奪三振 / 投球回</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="trendSoIp"></canvas></div>
     </div>
   </div>
 
@@ -464,7 +469,6 @@ const MLB_BASE = 'https://statsapi.mlb.com/api/v1';
 const TEAM_JA  = { 'Los Angeles Angels':'エンゼルス', 'Los Angeles Dodgers':'ドジャース' };
 const toJa = n => TEAM_JA[n] ?? n;
 
-let hrChartInst = null, eraChartInst = null, radarChartInst = null;
 let currentTableMode = 'batting';
 
 async function fetchMLB() {
@@ -645,8 +649,7 @@ function render(data, source) {
 
   renderTable(currentTableMode, career);
   renderAwards();
-  renderProgress(bat, pit);
-  renderCharts(career);
+  renderCharts(); // placeholder — trend charts populated after game log fetch
 }
 
 /* ══════════════════════════════════════
@@ -726,135 +729,209 @@ function renderAwards() {
 }
 
 /* ══════════════════════════════════════
-   PROGRESS BARS
+   GAME LOG FALLBACK (2026 試合別累積)
 ══════════════════════════════════════ */
-function pct(val, max) { return Math.min(100, Math.round((+val / max) * 100)); }
+// 打撃: 18試合分 (H/AB/HR/RBI/BB/TB)
+const BAT_GAMES_FB = [
+  {d:'3/20',h:1,ab:4,hr:0,rbi:0,bb:1,tb:1},{d:'3/21',h:0,ab:3,hr:0,rbi:0,bb:0,tb:0},
+  {d:'3/23',h:1,ab:4,hr:1,rbi:2,bb:0,tb:4},{d:'3/25',h:2,ab:4,hr:0,rbi:1,bb:1,tb:3},
+  {d:'3/27',h:0,ab:3,hr:0,rbi:0,bb:1,tb:0},{d:'3/29',h:1,ab:4,hr:1,rbi:1,bb:0,tb:4},
+  {d:'3/31',h:1,ab:3,hr:0,rbi:1,bb:1,tb:1},{d:'4/1', h:0,ab:4,hr:0,rbi:0,bb:0,tb:0},
+  {d:'4/3', h:2,ab:4,hr:1,rbi:2,bb:1,tb:5},{d:'4/5', h:1,ab:3,hr:0,rbi:0,bb:1,tb:1},
+  {d:'4/6', h:0,ab:4,hr:0,rbi:0,bb:0,tb:0},{d:'4/8', h:2,ab:4,hr:0,rbi:0,bb:0,tb:2},
+  {d:'4/9', h:1,ab:3,hr:0,rbi:0,bb:1,tb:1},{d:'4/10',h:0,ab:4,hr:0,rbi:0,bb:0,tb:0},
+  {d:'4/11',h:1,ab:3,hr:0,rbi:0,bb:1,tb:1},{d:'4/13',h:1,ab:4,hr:1,rbi:1,bb:1,tb:4},
+  {d:'4/14',h:0,ab:4,hr:0,rbi:0,bb:0,tb:0},{d:'4/16',h:2,ab:4,hr:1,rbi:2,bb:1,tb:5},
+];
+// 投球: 3先発 (gameIndex=先発した打撃試合index, ip/so/bb/h/er)
+const PIT_GAMES_FB = [
+  {d:'3/27',ip:6.0,so:6,bb:2,h:3,er:0},
+  {d:'4/5', ip:6.0,so:7,bb:3,h:3,er:1},
+  {d:'4/13',ip:6.0,so:5,bb:1,h:1,er:0},
+];
 
-function renderProgress(bat, pit) {
-  const items = [
-    { label:`打率 ${bat.avg}`, p: pct(+(bat.avg || 0), 0.35) * 1,  raw: bat.avg,  color:'#58a6ff', note:'MLB 平均 ~.250' },
-    { label:`OPS ${bat.ops}`,  p: pct(+(bat.ops || 0), 1.1)  * 1,  raw: bat.ops,  color:'#79c0ff', note:'1.100 = 超エリート' },
-    { label:`本塁打 ${bat.hr}`,p: pct(bat.hr, 60),                  raw: bat.hr,   color:'#d2a679', note:'60 = 歴史的レベル' },
-    { label:`OBP ${bat.obp}`,  p: pct(+(bat.obp || 0), 0.45),       raw: bat.obp,  color:'#a5d6ff', note:'出塁率' },
-    { label:`防御率 ${pit.era}`,p: pit.era !== '-.--' ? Math.max(0, 100 - pct(+pit.era, 5) * 1.2) : 0, raw: pit.era, color:'#56d364', note:'低いほど良' },
-    { label:`奪三振 ${pit.so}`, p: pct(pit.so, 200),                raw: pit.so,   color:'#3fb950', note:'シーズン 200K 目安' },
-  ];
-  document.getElementById('progressBars').innerHTML = items.map(it => `
-    <div class="prog-row">
-      <div class="prog-header">
-        <span>${it.label}</span>
-        <span style="color:var(--muted);font-size:.7rem">${it.note}</span>
-      </div>
-      <div class="prog-bar">
-        <div class="prog-fill" style="background:${it.color}" data-pct="${it.p}"></div>
-      </div>
-    </div>`).join('');
-  requestAnimationFrame(() => {
-    document.querySelectorAll('.prog-fill').forEach(el => { el.style.width = el.dataset.pct + '%'; });
+function buildBatCumulative(games) {
+  let cH=0,cAB=0,cHR=0,cRBI=0,cBB=0,cTB=0,cPA=0;
+  return games.map(g => {
+    cH+=g.h; cAB+=g.ab; cHR+=g.hr; cRBI+=g.rbi; cBB+=g.bb; cTB+=g.tb; cPA+=g.ab+g.bb;
+    const avg = cAB ? (cH/cAB) : 0;
+    const obp = cPA ? (cH+cBB)/cPA : 0;
+    const slg = cAB ? cTB/cAB : 0;
+    return { d:g.d, avg:+avg.toFixed(3), hr:cHR, rbi:cRBI, ops:+(obp+slg).toFixed(3) };
+  });
+}
+
+function buildPitCumulative(games) {
+  let cIP=0,cSO=0,cER=0,cBB=0,cH=0;
+  return games.map(g => {
+    cIP+=g.ip; cSO+=g.so; cER+=g.er; cBB+=g.bb; cH+=g.h;
+    const era  = cIP ? +(cER*9/cIP).toFixed(2) : 0;
+    const whip = cIP ? +((cH+cBB)/cIP).toFixed(2) : 0;
+    return { d:g.d, era, whip, so:cSO, ip:+cIP.toFixed(1) };
   });
 }
 
 /* ══════════════════════════════════════
-   CHARTS
+   FETCH GAME LOGS FROM MLB API
 ══════════════════════════════════════ */
-function renderCharts(career) {
-  if (hrChartInst)    { hrChartInst.destroy();    hrChartInst    = null; }
-  if (eraChartInst)   { eraChartInst.destroy();   eraChartInst   = null; }
-  if (radarChartInst) { radarChartInst.destroy();  radarChartInst = null; }
+async function fetchGameLogs(year) {
+  try {
+    const [bRes, pRes] = await Promise.all([
+      fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=gameLog&season=${year}&group=hitting&sportId=1`),
+      fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=gameLog&season=${year}&group=pitching&sportId=1`),
+    ]);
+    const [bData, pData] = await Promise.all([bRes.json(), pRes.json()]);
 
-  const bLabels = career.batting.map(d => d.year);
-  const hrs     = career.batting.map(d => d.hr);
-  const avgs    = career.batting.map(d => Math.round((+d.avg || 0) * 1000));
+    const batSplits = bData.stats[0]?.splits ?? [];
+    const pitSplits = pData.stats[0]?.splits ?? [];
 
-  hrChartInst = new Chart(document.getElementById('hrChart'), {
-    type: 'bar',
-    data: {
-      labels: bLabels,
-      datasets: [
-        { type:'bar',  label:'本塁打', data: hrs,  backgroundColor:'rgba(89,161,255,.55)', borderColor:'#58a6ff', borderWidth:1.5, borderRadius:4, yAxisID:'y' },
-        { type:'line', label:'打率×1000', data: avgs, borderColor:'#EFB21E', backgroundColor:'rgba(239,178,30,.1)', borderWidth:2, pointRadius:4, pointBackgroundColor:'#EFB21E', tension:.35, yAxisID:'y1' },
+    if (batSplits.length === 0) throw new Error('no game log data');
+
+    // 打撃累積
+    let cH=0,cAB=0,cHR=0,cRBI=0,cBB=0,cTB=0,cPA=0;
+    const batCum = batSplits.map(s => {
+      const st = s.stat;
+      const tb = (st.hits??0) + (st.doubles??0) + 2*(st.triples??0) + 3*(st.homeRuns??0);
+      cH+=st.hits??0; cAB+=st.atBats??0; cHR+=st.homeRuns??0;
+      cRBI+=st.rbi??0; cBB+=st.baseOnBalls??0; cTB+=tb;
+      cPA+=st.plateAppearances??0;
+      const avg = cAB?(cH/cAB):0;
+      const obp = cPA?(cH+cBB)/cPA:0;
+      const slg = cAB?cTB/cAB:0;
+      const label = (s.date??'').slice(5).replace('-','/');
+      return { d:label, avg:+avg.toFixed(3), hr:cHR, rbi:cRBI, ops:+(obp+slg).toFixed(3) };
+    });
+
+    // 投球累積
+    let pIP=0,pSO=0,pER=0,pBB=0,pH=0;
+    const pitCum = pitSplits.map(s => {
+      const st = s.stat;
+      const ipDecimal = parseIP(st.inningsPitched??'0');
+      pIP+=ipDecimal; pSO+=st.strikeOuts??0; pER+=st.earnedRuns??0;
+      pBB+=st.baseOnBalls??0; pH+=st.hits??0;
+      const era  = pIP?+(pER*9/pIP).toFixed(2):0;
+      const whip = pIP?+((pH+pBB)/pIP).toFixed(2):0;
+      const label = (s.date??'').slice(5).replace('-','/');
+      return { d:label, era, whip, so:pSO, ip:+pIP.toFixed(1) };
+    });
+
+    return { batCum, pitCum, source:'api' };
+  } catch {
+    return {
+      batCum: buildBatCumulative(BAT_GAMES_FB),
+      pitCum: buildPitCumulative(PIT_GAMES_FB),
+      source:'fallback',
+    };
+  }
+}
+
+function parseIP(ipStr) {
+  const parts = String(ipStr).split('.');
+  return parseInt(parts[0]||0) + (parseInt(parts[1]||0)/3);
+}
+
+/* ══════════════════════════════════════
+   TREND CHART INSTANCES
+══════════════════════════════════════ */
+const trendInsts = {};
+
+function renderCharts() {
+  // called from render() as placeholder — actual rendering done in renderTrendCharts()
+}
+
+async function renderTrendCharts(year) {
+  const { batCum, pitCum, source } = await fetchGameLogs(year);
+
+  const msg = document.getElementById('trendMsg');
+  if (source === 'fallback') {
+    msg.textContent = '※ ゲームログAPIが未対応のためサンプルデータを表示しています';
+    msg.style.display = 'block';
+  } else {
+    msg.style.display = 'none';
+  }
+
+  const batLabels = batCum.map(d => d.d);
+  const pitLabels = pitCum.map(d => d.d);
+
+  const base = {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10} } } },
+    scales:{
+      x:{ ticks:{color:'#8b949e', font:{size:9}, maxRotation:45}, grid:{color:'rgba(48,54,61,.4)'} },
+    },
+  };
+
+  // ① 打率 & OPS
+  destroyChart('avgOps');
+  trendInsts.avgOps = new Chart(document.getElementById('trendAvgOps'), {
+    type:'line',
+    data:{
+      labels: batLabels,
+      datasets:[
+        { label:'打率', data:batCum.map(d=>d.avg), borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,.08)', borderWidth:2, pointRadius:2, tension:.35, fill:true, yAxisID:'y' },
+        { label:'OPS',  data:batCum.map(d=>d.ops), borderColor:'#EFB21E', backgroundColor:'rgba(239,178,30,.05)', borderWidth:2, pointRadius:2, tension:.35, yAxisID:'y1' },
       ],
     },
-    options: chartOpts({
-      y:  { title:'本塁打', color:'#58a6ff' },
-      y1: { title:'打率×1000', color:'#EFB21E' },
-    }),
+    options:{...base, scales:{...base.scales,
+      y: { ticks:{color:'#58a6ff',font:{size:9}}, grid:{color:'rgba(48,54,61,.4)'}, title:{display:true,text:'打率',color:'#58a6ff',font:{size:9}} },
+      y1:{ position:'right', ticks:{color:'#EFB21E',font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true,text:'OPS',color:'#EFB21E',font:{size:9}} },
+    }},
   });
 
-  const pitFiltered = career.pitching.filter(d => +d.era < 10);
-  eraChartInst = new Chart(document.getElementById('eraChart'), {
-    type: 'line',
-    data: {
-      labels: pitFiltered.map(d => d.year),
-      datasets: [
-        { label:'防御率', data: pitFiltered.map(d => +d.era), borderColor:'#56d364', backgroundColor:'rgba(86,211,100,.12)', borderWidth:2.5, pointRadius:5, pointBackgroundColor:'#56d364', tension:.35, fill:true, yAxisID:'y' },
-        { label:'奪三振', data: pitFiltered.map(d => d.so),   borderColor:'#a5d6ff', borderWidth:2, pointRadius:4, pointBackgroundColor:'#a5d6ff', tension:.35, borderDash:[4,3], yAxisID:'y1' },
+  // ② HR & 打点
+  destroyChart('hrRbi');
+  trendInsts.hrRbi = new Chart(document.getElementById('trendHrRbi'), {
+    type:'line',
+    data:{
+      labels: batLabels,
+      datasets:[
+        { label:'本塁打', data:batCum.map(d=>d.hr),  borderColor:'#d2a679', backgroundColor:'rgba(210,166,121,.1)', borderWidth:2, pointRadius:3, tension:.2, stepped:true, yAxisID:'y' },
+        { label:'打点',   data:batCum.map(d=>d.rbi), borderColor:'#79c0ff', backgroundColor:'rgba(121,192,255,.1)', borderWidth:2, pointRadius:2, tension:.35, yAxisID:'y1' },
       ],
     },
-    options: chartOpts({
-      y:  { title:'防御率 (低いほど良)', color:'#56d364', reverse:true },
-      y1: { title:'奪三振', color:'#a5d6ff' },
-    }),
+    options:{...base, scales:{...base.scales,
+      y: { ticks:{color:'#d2a679',font:{size:9}}, grid:{color:'rgba(48,54,61,.4)'}, title:{display:true,text:'HR',color:'#d2a679',font:{size:9}} },
+      y1:{ position:'right', ticks:{color:'#79c0ff',font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true,text:'打点',color:'#79c0ff',font:{size:9}} },
+    }},
   });
 
-  const cs = lastData?.currentSeason;
-  const bat = cs?.batting ?? {};
-  const pit = cs?.pitching ?? {};
-
-  radarChartInst = new Chart(document.getElementById('radarChart'), {
-    type: 'radar',
-    data: {
-      labels: ['打率', '本塁打', '打点', '防御率', '奪三振', 'WHIP'],
-      datasets: [
-        {
-          label: `${cs?.year ?? '今'} シーズン`,
-          data: [
-            pct(+(bat.avg||0), .350),
-            pct(bat.hr, 60),
-            pct(bat.rbi, 130),
-            bat.era !== '-.--' ? Math.max(0, 100 - pct(+pit.era, 5) * 1.2) : 0,
-            pct(pit.so, 200),
-            pit.whip !== '-.--' ? Math.max(0, 100 - pct(+pit.whip, 2) * 1.2) : 0,
-          ],
-          backgroundColor:'rgba(239,178,30,.18)', borderColor:'#EFB21E',
-          borderWidth:2.5, pointBackgroundColor:'#EFB21E', pointRadius:4,
-        },
-        {
-          label:'2024 (キャリアハイ)',
-          data:[95, 100, 100, 80, 85, 82],
-          backgroundColor:'rgba(89,161,255,.1)', borderColor:'#58a6ff',
-          borderWidth:2, borderDash:[4,3], pointBackgroundColor:'#58a6ff', pointRadius:3,
-        },
+  // ③ 防御率 & WHIP (登板日のみ)
+  destroyChart('eraWhip');
+  trendInsts.eraWhip = new Chart(document.getElementById('trendEraWhip'), {
+    type:'line',
+    data:{
+      labels: pitLabels,
+      datasets:[
+        { label:'防御率', data:pitCum.map(d=>d.era),  borderColor:'#56d364', backgroundColor:'rgba(86,211,100,.1)', borderWidth:2.5, pointRadius:4, tension:.3, fill:true, yAxisID:'y' },
+        { label:'WHIP',  data:pitCum.map(d=>d.whip), borderColor:'#EFB21E', borderWidth:2, pointRadius:4, tension:.3, borderDash:[4,3], yAxisID:'y1' },
       ],
     },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:11} } } },
-      scales:{ r:{ min:0, max:100, ticks:{color:'transparent',backdropColor:'transparent',stepSize:25},
-        grid:{color:'rgba(48,54,61,.6)'}, angleLines:{color:'rgba(48,54,61,.6)'},
-        pointLabels:{color:'#8b949e',font:{size:11}} } },
+    options:{...base, scales:{...base.scales,
+      y: { reverse:true, ticks:{color:'#56d364',font:{size:9}}, grid:{color:'rgba(48,54,61,.4)'}, title:{display:true,text:'防御率',color:'#56d364',font:{size:9}} },
+      y1:{ position:'right', ticks:{color:'#EFB21E',font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true,text:'WHIP',color:'#EFB21E',font:{size:9}} },
+    }},
+  });
+
+  // ④ 奪三振 & 投球回
+  destroyChart('soIp');
+  trendInsts.soIp = new Chart(document.getElementById('trendSoIp'), {
+    type:'line',
+    data:{
+      labels: pitLabels,
+      datasets:[
+        { label:'奪三振', data:pitCum.map(d=>d.so), borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.1)', borderWidth:2, pointRadius:4, tension:.2, fill:true, yAxisID:'y' },
+        { label:'投球回', data:pitCum.map(d=>d.ip), borderColor:'#a5d6ff', borderWidth:2, pointRadius:4, tension:.2, borderDash:[4,3], yAxisID:'y1' },
+      ],
     },
+    options:{...base, scales:{...base.scales,
+      y: { ticks:{color:'#3fb950',font:{size:9}}, grid:{color:'rgba(48,54,61,.4)'}, title:{display:true,text:'奪三振',color:'#3fb950',font:{size:9}} },
+      y1:{ position:'right', ticks:{color:'#a5d6ff',font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true,text:'投球回',color:'#a5d6ff',font:{size:9}} },
+    }},
   });
 }
 
-function chartOpts({ y, y1 }) {
-  return {
-    responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:11} } } },
-    scales: {
-      x: { ticks:{color:'#8b949e'}, grid:{color:'rgba(48,54,61,.5)'} },
-      y: {
-        reverse: y.reverse ?? false,
-        ticks:{ color: y.color }, grid:{ color:'rgba(48,54,61,.5)' },
-        title:{ display:true, text: y.title, color: y.color, font:{size:10} },
-      },
-      y1: {
-        position:'right',
-        ticks:{ color: y1.color }, grid:{ drawOnChartArea:false },
-        title:{ display:true, text: y1.title, color: y1.color, font:{size:10} },
-      },
-    },
-  };
+function destroyChart(key) {
+  if (trendInsts[key]) { trendInsts[key].destroy(); delete trendInsts[key]; }
 }
 
 /* ══════════════════════════════════════
@@ -863,13 +940,21 @@ function chartOpts({ y, y1 }) {
 window.addEventListener('DOMContentLoaded', async () => {
   await loadData();
 
+  // 推移グラフを描画
+  const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
+  await renderTrendCharts(year);
+
   // Loading overlay を非表示
   const ov = document.getElementById('loadingOverlay');
   ov.classList.add('hidden');
   setTimeout(() => { ov.style.display = 'none'; }, 450);
 
   // 1 時間ごとに自動更新
-  setInterval(() => loadData(), 60 * 60 * 1000);
+  setInterval(async () => {
+    await loadData();
+    const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
+    await renderTrendCharts(yr);
+  }, 60 * 60 * 1000);
 });
 </script>
 </body>
