@@ -184,6 +184,30 @@
     }
     @keyframes shimmer { 0% { background-position:200% 0 } 100% { background-position:-200% 0 } }
 
+    /* ── Standings ── */
+    .standings-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px 20px; margin-bottom: 28px;
+    }
+    .standings-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+    .standings-table th {
+      font-size: .65rem; color: var(--muted); font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase;
+      padding: 7px 10px; text-align: center;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .standings-table th:nth-child(2) { text-align: left; }
+    .standings-table td {
+      padding: 9px 10px; text-align: center;
+      border-bottom: 1px solid rgba(48,54,61,.4);
+    }
+    .standings-table td:nth-child(2) { text-align: left; font-weight: 600; }
+    .standings-table tr:last-child td { border-bottom: none; }
+    .standings-table tr.dodgers-row { background: rgba(0,48,135,.2); }
+    .dodgers-name { color: var(--gold) !important; font-weight: 800 !important; }
+    .win-streak  { color: var(--green); font-weight: 700; }
+    .lose-streak { color: var(--red);   font-weight: 700; }
+
     /* ── Two-column ── */
     .two-col {
       display: grid; grid-template-columns: 1fr 1fr;
@@ -372,6 +396,25 @@
     </div>
     <div style="margin-left:auto;font-size:.72rem;color:var(--muted)">
       <span id="bannerGames">—</span> 試合 / <span id="bannerPitchG">—</span> 登板
+    </div>
+  </div>
+
+  <!-- NL West Standings -->
+  <p class="section-title">🏆 NL 西地区 順位表</p>
+  <div class="standings-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="panel-title" style="margin:0"><div class="dot blue"></div>National League West</div>
+      <span style="font-size:.7rem;color:var(--muted)" id="standingsUpdated"></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="standings-table">
+        <thead><tr>
+          <th>#</th><th>チーム</th><th>勝</th><th>負</th><th>勝率</th><th>GB</th><th>連続</th>
+        </tr></thead>
+        <tbody id="standingsBody">
+          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:18px">読み込み中…</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -642,8 +685,6 @@ function render(data, source) {
     { label:'本塁打', value: bat.hr,   sub: 'HR',            type:'batting',  cat:'homeRuns'           },
     { label:'打点',   value: bat.rbi,  sub: 'RBI',           type:'batting',  cat:'runsBattedIn'       },
     { label:'安打',   value: bat.h,    sub: `${bat.ab}打数`, type:'batting',  cat:'hits'               },
-    { label:'出塁率', value: bat.obp,  sub: 'OBP',           type:'batting',  cat:'onBasePercentage'   },
-    { label:'長打率', value: bat.slg,  sub: 'SLG',           type:'batting',  cat:'sluggingPercentage' },
     { label:'OPS',    value: bat.ops,  sub: '出塁+長打',     type:'batting',  cat:'onBasePlusSlugging' },
     { label:'得点',   value: bat.r,    sub: 'Runs',          type:'batting',  cat:'runs'               },
   ];
@@ -668,6 +709,59 @@ function render(data, source) {
   renderTable(currentTableMode, career);
   renderAwards();
   renderCharts(); // placeholder — trend charts populated after game log fetch
+}
+
+/* ══════════════════════════════════════
+   NL WEST STANDINGS
+══════════════════════════════════════ */
+const NL_WEST_ID  = 203;
+const DODGERS_ID  = 119;
+const TEAM_SHORT  = {
+  'Los Angeles Dodgers':  '★ LAドジャース',
+  'San Diego Padres':     'SDパドレス',
+  'San Francisco Giants': 'SFジャイアンツ',
+  'Arizona Diamondbacks': 'AZダイヤモンドバックス',
+  'Colorado Rockies':     'COロッキーズ',
+};
+
+async function fetchStandings(year) {
+  try {
+    const res  = await fetchWithTimeout(
+      `${MLB_BASE}/standings?leagueId=104&season=${year}&standingsTypes=regularSeason`, 5000
+    );
+    const data = await res.json();
+    const nlWest = (data.records ?? []).find(r => r.division?.id === NL_WEST_ID);
+    return nlWest?.teamRecords ?? [];
+  } catch (e) {
+    console.warn('Standings fetch failed:', e.message);
+    return [];
+  }
+}
+
+function renderStandings(records) {
+  const tbody = document.getElementById('standingsBody');
+  if (!records.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">データ取得できませんでした</td></tr>';
+    return;
+  }
+  tbody.innerHTML = records.map((r, i) => {
+    const isDodgers = r.team?.id === DODGERS_ID;
+    const name   = TEAM_SHORT[r.team?.name] ?? r.team?.name ?? '-';
+    const gb     = r.gamesBack === '-' ? '—' : (r.gamesBack ?? '—');
+    const streak = r.streak?.streakCode ?? '-';
+    const isWin  = streak.startsWith('W');
+    return `<tr class="${isDodgers ? 'dodgers-row' : ''}">
+      <td style="color:var(--muted);font-weight:700">${i + 1}</td>
+      <td class="${isDodgers ? 'dodgers-name' : ''}">${name}</td>
+      <td>${r.wins ?? '-'}</td>
+      <td>${r.losses ?? '-'}</td>
+      <td>${r.winningPercentage ?? '-'}</td>
+      <td style="color:var(--muted)">${gb}</td>
+      <td class="${isWin ? 'win-streak' : 'lose-streak'}">${streak}</td>
+    </tr>`;
+  }).join('');
+  const el = document.getElementById('standingsUpdated');
+  if (el) el.textContent = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) + ' JST 更新';
 }
 
 /* ══════════════════════════════════════
@@ -1037,15 +1131,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     hideOverlay();
   }
 
-  // 推移グラフはオーバーレイ解除後に独立して描画
+  // 推移グラフ・順位表はオーバーレイ解除後に独立して描画
   const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
   renderTrendCharts(year);
+  fetchStandings(year).then(renderStandings);
 
   // 1 時間ごとに自動更新
   setInterval(async () => {
     try { await loadData(); } catch (e) { console.warn('Auto-refresh error:', e); }
     const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
     renderTrendCharts(yr);
+    fetchStandings(yr).then(renderStandings);
   }, 60 * 60 * 1000);
 });
 </script>
