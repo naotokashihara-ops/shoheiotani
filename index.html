@@ -911,16 +911,26 @@ function renderCharts() {
 }
 
 async function renderTrendCharts(year) {
-  const { batCum, pitCum, source } = await fetchGameLogs(year);
+  // ① まず静的データで即描画（API待ちなし）
+  _drawTrendCharts(buildBatCumulative(BAT_GAMES_FB), buildPitCumulative(PIT_GAMES_FB));
 
-  const msg = document.getElementById('trendMsg');
-  if (source === 'fallback') {
-    msg.textContent = '※ ゲームログAPIが未対応のためサンプルデータを表示しています';
-    msg.style.display = 'block';
-  } else {
-    msg.style.display = 'none';
+  // ② バックグラウンドでAPI取得→上書き
+  try {
+    const { batCum, pitCum, source } = await fetchGameLogs(year);
+    _drawTrendCharts(batCum, pitCum);
+    const msg = document.getElementById('trendMsg');
+    if (source === 'fallback') {
+      msg.textContent = '※ サンプルデータを表示しています（MLB APIゲームログ未対応）';
+      msg.style.display = 'block';
+    } else {
+      msg.style.display = 'none';
+    }
+  } catch (e) {
+    console.warn('game log update failed:', e);
   }
+}
 
+function _drawTrendCharts(batCum, pitCum) {
   const batLabels = batCum.map(d => d.d);
   const pitLabels = pitCum.map(d => d.d);
 
@@ -1020,8 +1030,6 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   try {
     await loadData();
-    const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
-    await renderTrendCharts(year);
   } catch (e) {
     console.error('Init error:', e);
   } finally {
@@ -1029,13 +1037,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     hideOverlay();
   }
 
+  // 推移グラフはオーバーレイ解除後に独立して描画
+  const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
+  renderTrendCharts(year);
+
   // 1 時間ごとに自動更新
   setInterval(async () => {
-    try {
-      await loadData();
-      const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
-      await renderTrendCharts(yr);
-    } catch (e) { console.warn('Auto-refresh error:', e); }
+    try { await loadData(); } catch (e) { console.warn('Auto-refresh error:', e); }
+    const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
+    renderTrendCharts(yr);
   }, 60 * 60 * 1000);
 });
 </script>
