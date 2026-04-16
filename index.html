@@ -476,13 +476,22 @@ const toJa = n => TEAM_JA[n] ?? n;
 
 let currentTableMode = 'batting';
 
+// タイムアウト付き fetch（デフォルト5秒）
+function fetchWithTimeout(url, ms = 5000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal })
+    .then(r => { clearTimeout(timer); return r; })
+    .catch(e => { clearTimeout(timer); throw e; });
+}
+
 async function fetchMLB() {
   const year = new Date().getFullYear();
   const [b, p, cb, cp] = await Promise.all([
-    fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=season&season=${year}&group=hitting&sportId=1`).then(r => r.json()),
-    fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=season&season=${year}&group=pitching&sportId=1`).then(r => r.json()),
-    fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=yearByYear&group=hitting&sportId=1`).then(r => r.json()),
-    fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=yearByYear&group=pitching&sportId=1`).then(r => r.json()),
+    fetchWithTimeout(`${MLB_BASE}/people/${MLB_ID}/stats?stats=season&season=${year}&group=hitting&sportId=1`).then(r => r.json()),
+    fetchWithTimeout(`${MLB_BASE}/people/${MLB_ID}/stats?stats=season&season=${year}&group=pitching&sportId=1`).then(r => r.json()),
+    fetchWithTimeout(`${MLB_BASE}/people/${MLB_ID}/stats?stats=yearByYear&group=hitting&sportId=1`).then(r => r.json()),
+    fetchWithTimeout(`${MLB_BASE}/people/${MLB_ID}/stats?stats=yearByYear&group=pitching&sportId=1`).then(r => r.json()),
   ]);
 
   const bat = b.stats[0]?.splits[0]?.stat ?? {};
@@ -682,8 +691,8 @@ async function fetchNLRankings(year) {
 
   try {
     const [bData, pData] = await Promise.all([
-      fetch(`${base}&leaderCategories=${batCats}&statGroup=hitting`).then(r => r.json()),
-      fetch(`${base}&leaderCategories=${pitCats}&statGroup=pitching`).then(r => r.json()),
+      fetchWithTimeout(`${base}&leaderCategories=${batCats}&statGroup=hitting`).then(r => r.json()),
+      fetchWithTimeout(`${base}&leaderCategories=${pitCats}&statGroup=pitching`).then(r => r.json()),
     ]);
 
     const rankings = {};
@@ -845,8 +854,8 @@ function buildPitCumulative(games) {
 async function fetchGameLogs(year) {
   try {
     const [bRes, pRes] = await Promise.all([
-      fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=gameLog&season=${year}&group=hitting&sportId=1`),
-      fetch(`${MLB_BASE}/people/${MLB_ID}/stats?stats=gameLog&season=${year}&group=pitching&sportId=1`),
+      fetchWithTimeout(`${MLB_BASE}/people/${MLB_ID}/stats?stats=gameLog&season=${year}&group=hitting&sportId=1`),
+      fetchWithTimeout(`${MLB_BASE}/people/${MLB_ID}/stats?stats=gameLog&season=${year}&group=pitching&sportId=1`),
     ]);
     const [bData, pData] = await Promise.all([bRes.json(), pRes.json()]);
 
@@ -1006,22 +1015,33 @@ function destroyChart(key) {
    INIT
 ══════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', async () => {
-  await loadData();
-
-  // 推移グラフを描画
-  const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
-  await renderTrendCharts(year);
-
-  // Loading overlay を非表示
   const ov = document.getElementById('loadingOverlay');
-  ov.classList.add('hidden');
-  setTimeout(() => { ov.style.display = 'none'; }, 450);
+  const hideOverlay = () => {
+    ov.classList.add('hidden');
+    setTimeout(() => { ov.style.display = 'none'; }, 450);
+  };
+
+  // 最大8秒でフリーズしても強制的にオーバーレイ解除
+  const safetyTimer = setTimeout(hideOverlay, 8000);
+
+  try {
+    await loadData();
+    const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
+    await renderTrendCharts(year);
+  } catch (e) {
+    console.error('Init error:', e);
+  } finally {
+    clearTimeout(safetyTimer);
+    hideOverlay();
+  }
 
   // 1 時間ごとに自動更新
   setInterval(async () => {
-    await loadData();
-    const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
-    await renderTrendCharts(yr);
+    try {
+      await loadData();
+      const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
+      await renderTrendCharts(yr);
+    } catch (e) { console.warn('Auto-refresh error:', e); }
   }, 60 * 60 * 1000);
 });
 </script>
