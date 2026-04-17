@@ -1373,25 +1373,27 @@ function _drawTrendCharts(batCum, pitCum) {
       ],
     },
     options:{...base, scales:{...base.scales,
-      y: { reverse:true, ticks:{color:'#56d364',font:{size:9}}, grid:{color:'rgba(48,54,61,.4)'}, title:{display:true,text:'防御率',color:'#56d364',font:{size:9}} },
-      y1:{ position:'right', ticks:{color:'#EFB21E',font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true,text:'WHIP',color:'#EFB21E',font:{size:9}} },
+      y: { min:0, suggestedMax:4.5, ticks:{color:'#56d364',font:{size:9}}, grid:{color:'rgba(48,54,61,.4)'}, title:{display:true,text:'防御率',color:'#56d364',font:{size:9}} },
+      y1:{ position:'right', min:0, suggestedMax:2, ticks:{color:'#EFB21E',font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true,text:'WHIP',color:'#EFB21E',font:{size:9}} },
     }},
   });
 
-  // ④ 奪三振 & 投球回
+  // ④ 奪三振 & 投球回（1登板ごとの数値）
+  const soPerGame = pitCum.map((d,i) => i===0 ? d.so : d.so - pitCum[i-1].so);
+  const ipPerGame = pitCum.map((d,i) => i===0 ? d.ip : +(d.ip - pitCum[i-1].ip).toFixed(1));
   destroyChart('soIp');
   trendInsts.soIp = new Chart(document.getElementById('trendSoIp'), {
-    type:'line',
+    type:'bar',
     data:{
       labels: pitLabels,
       datasets:[
-        { label:'奪三振', data:pitCum.map(d=>d.so), borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.1)', borderWidth:2, pointRadius:4, tension:.2, fill:true, yAxisID:'y' },
-        { label:'投球回', data:pitCum.map(d=>d.ip), borderColor:'#a5d6ff', borderWidth:2, pointRadius:4, tension:.2, borderDash:[4,3], yAxisID:'y1' },
+        { label:'奪三振', data:soPerGame, backgroundColor:'rgba(63,185,80,.7)', borderColor:'#3fb950', borderWidth:1.5, yAxisID:'y' },
+        { label:'投球回', data:ipPerGame, type:'line', borderColor:'#a5d6ff', backgroundColor:'rgba(165,214,255,.08)', borderWidth:2, pointRadius:4, tension:.2, fill:true, yAxisID:'y1' },
       ],
     },
     options:{...base, scales:{...base.scales,
-      y: { ticks:{color:'#3fb950',font:{size:9}}, grid:{color:'rgba(48,54,61,.4)'}, title:{display:true,text:'奪三振',color:'#3fb950',font:{size:9}} },
-      y1:{ position:'right', ticks:{color:'#a5d6ff',font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true,text:'投球回',color:'#a5d6ff',font:{size:9}} },
+      y: { min:0, suggestedMax:12, ticks:{color:'#3fb950',font:{size:9},stepSize:2}, grid:{color:'rgba(48,54,61,.4)'}, title:{display:true,text:'奪三振',color:'#3fb950',font:{size:9}} },
+      y1:{ position:'right', min:0, suggestedMax:9, ticks:{color:'#a5d6ff',font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true,text:'投球回',color:'#a5d6ff',font:{size:9}} },
     }},
   });
 }
