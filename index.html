@@ -706,6 +706,40 @@ async function fetchMLB() {
 }
 
 /* ══════════════════════════════════════
+   CURRENT SEASON ライブ取得
+   data.json より確実に最新の成績を返す
+   （打撃・投球 各1回のAPI呼び出しのみ）
+══════════════════════════════════════ */
+async function fetchCurrentSeasonLive() {
+  const year = new Date().getFullYear();
+  const [bRes, pRes] = await Promise.all([
+    fetchWithTimeout(`${MLB_BASE}/people/${MLB_ID}/stats?stats=season&season=${year}&group=hitting&sportId=1`),
+    fetchWithTimeout(`${MLB_BASE}/people/${MLB_ID}/stats?stats=season&season=${year}&group=pitching&sportId=1`),
+  ]);
+  const [b, p] = await Promise.all([bRes.json(), pRes.json()]);
+  const bat = b.stats[0]?.splits[0]?.stat ?? {};
+  const pit = p.stats[0]?.splits[0]?.stat ?? {};
+  return {
+    batting: {
+      avg: bat.avg ?? '.---', g: bat.gamesPlayed ?? 0,
+      ab: bat.atBats ?? 0,   h: bat.hits ?? 0,
+      hr: bat.homeRuns ?? 0, rbi: bat.rbi ?? 0,
+      r: bat.runs ?? 0,      so: bat.strikeOuts ?? 0,
+      sb: bat.stolenBases ?? 0, pa: bat.plateAppearances ?? 0,
+      obp: bat.obp ?? '.---', slg: bat.slg ?? '.---', ops: bat.ops ?? '.---',
+    },
+    pitching: {
+      era: pit.era ?? '-.--',
+      g: pit.gamesPlayed ?? 0, gs: pit.gamesStarted ?? 0,
+      w: pit.wins ?? 0,        l: pit.losses ?? 0,
+      ip: pit.inningsPitched ?? '0.0',
+      so: pit.strikeOuts ?? 0, bb: pit.baseOnBalls ?? 0,
+      h: pit.hits ?? 0,        whip: pit.whip ?? '-.--',
+    },
+  };
+}
+
+/* ══════════════════════════════════════
    MAIN LOAD
 ══════════════════════════════════════ */
 let lastData = null;
@@ -746,6 +780,17 @@ async function loadData(manual = false) {
   btn.disabled = false;
   spinner.style.display = 'none';
   icon.style.display    = 'inline';
+
+  // data.json からの表示後、バックグラウンドでライブAPIを叩いて上書き
+  // （GitHub Actionsの更新タイミングに関わらず、常に最新の成績を表示する）
+  if (source === 'cache') {
+    fetchCurrentSeasonLive().then(cs => {
+      if (!cs || !lastData) return;
+      lastData.currentSeason.batting  = cs.batting;
+      lastData.currentSeason.pitching = cs.pitching;
+      render(lastData, 'live');
+    }).catch(() => {});
+  }
 }
 
 /* ══════════════════════════════════════
