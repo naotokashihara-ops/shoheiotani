@@ -208,6 +208,26 @@
     .win-streak  { color: var(--green); font-weight: 700; }
     .lose-streak { color: var(--red);   font-weight: 700; }
 
+    /* ── Next Game ── */
+    .next-game-box {
+      margin-top: 16px; border-top: 1px solid var(--border);
+      padding-top: 14px;
+    }
+    .next-game-label {
+      font-size: .68rem; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .08em; margin-bottom: 8px;
+    }
+    .next-game-main {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .next-game-badge {
+      background: rgba(0,48,135,.35); border: 1px solid rgba(0,90,200,.4);
+      border-radius: 8px; padding: 6px 14px; font-size: .78rem;
+      color: var(--gold); font-weight: 800; white-space: nowrap;
+    }
+    .next-game-info { font-size: .82rem; color: var(--text); line-height: 1.6; }
+    .next-game-info span { color: var(--muted); }
+
     /* ── Two-column ── */
     .two-col {
       display: grid; grid-template-columns: 1fr 1fr;
@@ -416,6 +436,13 @@
         </tbody>
       </table>
     </div>
+    <!-- Next Game -->
+    <div class="next-game-box">
+      <div class="next-game-label">⚡ ドジャース 次戦</div>
+      <div class="next-game-main" id="nextGameBox">
+        <span style="font-size:.78rem;color:var(--muted)">読み込み中…</span>
+      </div>
+    </div>
   </div>
 
   <!-- Batting Cards -->
@@ -458,6 +485,20 @@
     <div class="table-wrap" id="careerTable"></div>
   </div>
 
+  <!-- 日本人メジャーリーガー 2026成績 -->
+  <p class="section-title" style="margin-top:28px">🇯🇵 日本人メジャーリーガー 2026年成績</p>
+  <div class="panel">
+    <div class="tabs" id="jpTabs">
+      <button class="tab active" onclick="switchJPTab('batting',this)">打者成績</button>
+      <button class="tab" onclick="switchJPTab('pitching',this)">投手成績</button>
+    </div>
+    <div id="jpBatTable" class="table-wrap">
+      <p style="text-align:center;padding:20px;color:var(--muted);font-size:.82rem">読み込み中…</p>
+    </div>
+    <div id="jpPitTable" class="table-wrap" style="display:none">
+      <p style="text-align:center;padding:20px;color:var(--muted);font-size:.82rem">読み込み中…</p>
+    </div>
+  </div>
 
 </main>
 
@@ -771,6 +812,101 @@ function renderStandings(records) {
   }).join('');
   const el = document.getElementById('standingsUpdated');
   if (el) el.textContent = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) + ' JST 更新';
+}
+
+/* ══════════════════════════════════════
+   NEXT GAME
+══════════════════════════════════════ */
+const MLB_TEAM_JA = {
+  'Arizona Diamondbacks':'AZダイヤモンドバックス','Diamondbacks':'AZダイヤモンドバックス',
+  'Atlanta Braves':'ATLブレーブス','Braves':'ATLブレーブス',
+  'Baltimore Orioles':'BALオリオールズ','Orioles':'BALオリオールズ',
+  'Boston Red Sox':'BOSレッドソックス','Red Sox':'BOSレッドソックス',
+  'Chicago Cubs':'CHCカブス','Cubs':'CHCカブス',
+  'Chicago White Sox':'CWSホワイトソックス','White Sox':'CWSホワイトソックス',
+  'Cincinnati Reds':'CINレッズ','Reds':'CINレッズ',
+  'Cleveland Guardians':'CLEガーディアンズ','Guardians':'CLEガーディアンズ',
+  'Colorado Rockies':'COLロッキーズ','Rockies':'COLロッキーズ',
+  'Detroit Tigers':'DETタイガース','Tigers':'DETタイガース',
+  'Houston Astros':'HOUアストロズ','Astros':'HOUアストロズ',
+  'Kansas City Royals':'KCロイヤルズ','Royals':'KCロイヤルズ',
+  'Los Angeles Angels':'LAAエンゼルス','Angels':'LAAエンゼルス',
+  'Los Angeles Dodgers':'LAドジャース','Dodgers':'LAドジャース',
+  'Miami Marlins':'MIAマーリンズ','Marlins':'MIAマーリンズ',
+  'Milwaukee Brewers':'MILブルワーズ','Brewers':'MILブルワーズ',
+  'Minnesota Twins':'MINツインズ','Twins':'MINツインズ',
+  'New York Mets':'NYMメッツ','Mets':'NYMメッツ',
+  'New York Yankees':'NYYヤンキース','Yankees':'NYYヤンキース',
+  'Oakland Athletics':'OAKアスレチックス','Athletics':'OAKアスレチックス',
+  'Philadelphia Phillies':'PHIフィリーズ','Phillies':'PHIフィリーズ',
+  'Pittsburgh Pirates':'PITパイレーツ','Pirates':'PITパイレーツ',
+  'San Diego Padres':'SDパドレス','Padres':'SDパドレス',
+  'San Francisco Giants':'SFジャイアンツ','Giants':'SFジャイアンツ',
+  'Seattle Mariners':'SEAマリナーズ','Mariners':'SEAマリナーズ',
+  'St. Louis Cardinals':'STLカーディナルス','Cardinals':'STLカーディナルス',
+  'Tampa Bay Rays':'TBレイズ','Rays':'TBレイズ',
+  'Texas Rangers':'TEXレンジャーズ','Rangers':'TEXレンジャーズ',
+  'Toronto Blue Jays':'TORブルージェイズ','Blue Jays':'TORブルージェイズ',
+  'Washington Nationals':'WASナショナルズ','Nationals':'WASナショナルズ',
+};
+
+async function fetchNextGame() {
+  try {
+    const now   = new Date();
+    const pad   = n => String(n).padStart(2,'0');
+    const fmt   = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const start = fmt(now);
+    const end30 = new Date(now); end30.setDate(end30.getDate() + 30);
+    const end   = fmt(end30);
+    const url   = `${MLB_BASE}/schedule?teamId=${DODGERS_ID}&startDate=${start}&endDate=${end}&sportId=1&gameType=R&hydrate=team,venue`;
+    const res   = await fetchWithTimeout(url, 5000);
+    const data  = await res.json();
+    // Find first scheduled/preview game
+    for (const day of (data.dates ?? [])) {
+      for (const g of (day.games ?? [])) {
+        const st = (g.status?.abstractGameState ?? '').toLowerCase();
+        if (st === 'preview' || st === 'scheduled' || !st) {
+          return g;
+        }
+      }
+    }
+    return null;
+  } catch(e) {
+    console.warn('fetchNextGame failed:', e.message);
+    return null;
+  }
+}
+
+function renderNextGame(game) {
+  const box = document.getElementById('nextGameBox');
+  if (!box) return;
+  if (!game) {
+    box.innerHTML = '<span style="font-size:.78rem;color:var(--muted)">次戦情報なし</span>';
+    return;
+  }
+  const isHome   = game.teams?.home?.team?.id === DODGERS_ID;
+  const opponent = isHome ? game.teams?.away?.team : game.teams?.home?.team;
+  const oppName  = MLB_TEAM_JA[opponent?.name] ?? MLB_TEAM_JA[opponent?.teamName] ?? opponent?.name ?? '—';
+  const venue    = game.venue?.name ?? '—';
+  const ha       = isHome ? '🏠 ホーム' : '✈️ ビジター';
+
+  // Convert UTC datetime to JST
+  const gameUtc  = game.gameDate ? new Date(game.gameDate) : null;
+  let dateStr = '—';
+  if (gameUtc) {
+    dateStr = gameUtc.toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      month: 'numeric', day: 'numeric', weekday: 'short',
+      hour: '2-digit', minute: '2-digit'
+    }) + ' JST';
+  }
+
+  box.innerHTML = `
+    <div class="next-game-badge">VS ${oppName}</div>
+    <div class="next-game-info">
+      <div>${dateStr}</div>
+      <div><span>${ha}　</span>${venue}</div>
+    </div>`;
 }
 
 /* ══════════════════════════════════════
@@ -1124,6 +1260,142 @@ function destroyChart(key) {
 }
 
 /* ══════════════════════════════════════
+   日本人メジャーリーガー 2026成績
+══════════════════════════════════════ */
+const JP_BATTERS_LIST = [
+  { ja:'村上宗隆', search:'Munetaka Murakami' },
+  { ja:'岡本和真',  search:'Kazuma Okamoto'    },
+  { ja:'鈴木誠也',  search:'Seiya Suzuki'      },
+  { ja:'吉田正尚',  search:'Masataka Yoshida'  },
+];
+const JP_PITCHERS_LIST = [
+  { ja:'山本由伸',   search:'Yoshinobu Yamamoto' },
+  { ja:'佐々木朗希', search:'Roki Sasaki'         },
+  { ja:'今永昇太',   search:'Shota Imanaga'       },
+  { ja:'千賀滉大',   search:'Kodai Senga'         },
+  { ja:'菊池雄星',   search:'Yusei Kikuchi'       },
+  { ja:'菅野智之',   search:'Tomoyuki Sugano'     },
+  { ja:'今井達也',   search:'Tatsuya Imai'        },
+];
+
+async function resolveMLBId(searchName) {
+  try {
+    const res = await fetchWithTimeout(
+      `${MLB_BASE}/people/search?names=${encodeURIComponent(searchName)}&sportId=1`, 6000
+    );
+    const d = await res.json();
+    const people = (d.people ?? []).sort((a,b) => (b.active?1:0) - (a.active?1:0));
+    return people[0]?.id ?? null;
+  } catch(e) { return null; }
+}
+
+async function fetchAllJPStats(year) {
+  // ① 全選手のIDを並列で解決
+  const [batWithId, pitWithId] = await Promise.all([
+    Promise.all(JP_BATTERS_LIST.map(p  => resolveMLBId(p.search).then(id => ({...p, id})))),
+    Promise.all(JP_PITCHERS_LIST.map(p => resolveMLBId(p.search).then(id => ({...p, id})))),
+  ]);
+
+  // ② IDが取得できた選手の成績を並列フェッチ
+  const getStats = (players, group) => Promise.all(players.map(async p => {
+    if (!p.id) return { ja:p.ja, team:'—', stat:null };
+    try {
+      const res = await fetchWithTimeout(
+        `${MLB_BASE}/people/${p.id}/stats?stats=season&season=${year}&group=${group}&sportId=1`, 6000
+      );
+      const d = await res.json();
+      const split = d.stats?.[0]?.splits?.[0];
+      const teamFull = split?.team?.name ?? '';
+      const team = MLB_TEAM_JA[teamFull]
+                ?? MLB_TEAM_JA[teamFull.split(' ').slice(-1)[0]]
+                ?? (teamFull || '—');
+      return { ja:p.ja, team, stat: split?.stat ?? null };
+    } catch(e) { return { ja:p.ja, team:'—', stat:null }; }
+  }));
+
+  const [batStats, pitStats] = await Promise.all([
+    getStats(batWithId,  'hitting'),
+    getStats(pitWithId, 'pitching'),
+  ]);
+  return { batStats, pitStats };
+}
+
+let jpMode = 'batting';
+function switchJPTab(mode, btn) {
+  jpMode = mode;
+  document.querySelectorAll('#jpTabs .tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('jpBatTable').style.display  = mode === 'batting'  ? '' : 'none';
+  document.getElementById('jpPitTable').style.display  = mode === 'pitching' ? '' : 'none';
+}
+
+function renderJPStats({ batStats, pitStats }) {
+  const fmtAvg = v => typeof v === 'number' ? v.toFixed(3) : (v ?? '.---');
+  const fmtEra = v => typeof v === 'number' ? v.toFixed(2) : (v ?? '-.--');
+  const noData = (ja, cols) =>
+    `<tr><td style="font-weight:700;color:var(--gold)">${ja}</td>`+
+    `<td colspan="${cols}" style="text-align:center;color:var(--muted);font-size:.78rem">データなし</td></tr>`;
+
+  // 打者表
+  document.getElementById('jpBatTable').innerHTML = `
+    <table><thead><tr>
+      <th>選手</th><th>チーム</th>
+      <th>試合</th><th>打率</th><th>打数</th><th>安打</th>
+      <th>本塁打</th><th>打点</th><th>得点</th>
+      <th>出塁率</th><th>長打率</th><th>OPS</th><th>三振</th><th>盗塁</th>
+    </tr></thead><tbody>
+    ${batStats.map(p => {
+      if (!p.stat) return noData(p.ja, 13);
+      const s = p.stat;
+      return `<tr>
+        <td style="font-weight:700;color:var(--gold)">${p.ja}</td>
+        <td>${p.team}</td>
+        <td>${s.gamesPlayed??0}</td>
+        <td class="hl">${fmtAvg(s.avg)}</td>
+        <td>${s.atBats??0}</td>
+        <td>${s.hits??0}</td>
+        <td class="hl">${s.homeRuns??0}</td>
+        <td>${s.rbi??0}</td>
+        <td>${s.runs??0}</td>
+        <td>${fmtAvg(s.obp)}</td>
+        <td>${fmtAvg(s.slg)}</td>
+        <td class="hl">${fmtAvg(s.ops)}</td>
+        <td>${s.strikeOuts??0}</td>
+        <td>${s.stolenBases??0}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+
+  // 投手表
+  document.getElementById('jpPitTable').innerHTML = `
+    <table><thead><tr>
+      <th>選手</th><th>チーム</th>
+      <th>登板</th><th>先発</th><th>勝</th><th>敗</th>
+      <th>防御率</th><th>投球回</th><th>奪三振</th>
+      <th>与四球</th><th>被安打</th><th>WHIP</th>
+    </tr></thead><tbody>
+    ${pitStats.map(p => {
+      if (!p.stat) return noData(p.ja, 11);
+      const s = p.stat;
+      return `<tr>
+        <td style="font-weight:700;color:var(--gold)">${p.ja}</td>
+        <td>${p.team}</td>
+        <td>${s.gamesPlayed??0}</td>
+        <td>${s.gamesStarted??0}</td>
+        <td>${s.wins??0}</td>
+        <td>${s.losses??0}</td>
+        <td class="hl g">${fmtEra(s.era)}</td>
+        <td>${s.inningsPitched??'0.0'}</td>
+        <td class="hl g">${s.strikeOuts??0}</td>
+        <td>${s.baseOnBalls??0}</td>
+        <td>${s.hits??0}</td>
+        <td class="hl g">${fmtEra(s.whip)}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+/* ══════════════════════════════════════
    INIT
 ══════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', async () => {
@@ -1149,6 +1421,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
   renderTrendCharts(year);
   fetchStandings(year).then(renderStandings);
+  fetchNextGame().then(renderNextGame);
+  fetchAllJPStats(year).then(renderJPStats);
 
   // 1 時間ごとに自動更新
   setInterval(async () => {
@@ -1156,6 +1430,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
     renderTrendCharts(yr);
     fetchStandings(yr).then(renderStandings);
+    fetchNextGame().then(renderNextGame);
+    fetchAllJPStats(yr).then(renderJPStats);
   }, 60 * 60 * 1000);
 });
 </script>
