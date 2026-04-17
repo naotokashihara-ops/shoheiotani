@@ -249,15 +249,35 @@
     .win-streak  { color: var(--green); font-weight: 700; }
     .lose-streak { color: var(--red);   font-weight: 700; }
 
-    /* ── Next Game ── */
-    .next-game-box {
+    /* ── Last Game & Next Game ── */
+    .last-game-box {
       margin-top: 16px; border-top: 1px solid var(--border);
-      padding-top: 14px;
+      padding-top: 14px; padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
     }
-    .next-game-label {
+    .next-game-box { padding-top: 14px; }
+    .game-section-label {
       font-size: .68rem; color: var(--muted); text-transform: uppercase;
       letter-spacing: .08em; margin-bottom: 8px;
     }
+    /* 試合結果 */
+    .last-game-main {
+      display: flex; align-items: center; gap: 14px;
+    }
+    .last-game-score {
+      font-size: 1.6rem; font-weight: 900; white-space: nowrap; line-height: 1;
+    }
+    .lg-dod { color: var(--gold); }
+    .lg-sep { color: var(--border); margin: 0 3px; }
+    .lg-opp { color: var(--muted); }
+    .last-game-info { font-size: .82rem; color: var(--text); line-height: 1.7; min-width:0; }
+    .result-badge {
+      display: inline-block; padding: 1px 7px; border-radius: 5px;
+      font-size: .72rem; font-weight: 800; margin-left: 4px;
+    }
+    .result-win  { background: rgba(63,185,80,.2);  color: var(--green); }
+    .result-loss { background: rgba(248,81,73,.2);  color: var(--red); }
+    /* 次戦 */
     .next-game-main {
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     }
@@ -487,9 +507,16 @@
         </tbody>
       </table>
     </div>
+    <!-- 直前の試合結果 -->
+    <div class="last-game-box">
+      <div class="game-section-label">📊 直前の試合結果</div>
+      <div id="lastGameBox">
+        <span style="font-size:.78rem;color:var(--muted)">読み込み中…</span>
+      </div>
+    </div>
     <!-- Next Game -->
     <div class="next-game-box">
-      <div class="next-game-label">⚡ ドジャース 次戦</div>
+      <div class="game-section-label">⚡ ドジャース 次戦</div>
       <div class="next-game-main" id="nextGameBox">
         <span style="font-size:.78rem;color:var(--muted)">読み込み中…</span>
       </div>
@@ -900,6 +927,71 @@ const MLB_TEAM_JA = {
   'Toronto Blue Jays':'TORブルージェイズ','Blue Jays':'TORブルージェイズ',
   'Washington Nationals':'WASナショナルズ','Nationals':'WASナショナルズ',
 };
+
+async function fetchLastGame() {
+  try {
+    const now  = new Date();
+    const pad  = n => String(n).padStart(2,'0');
+    const fmt  = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const end  = fmt(now);
+    const past = new Date(now); past.setDate(past.getDate() - 10);
+    const start = fmt(past);
+    const url  = `${MLB_BASE}/schedule?teamId=${DODGERS_ID}&startDate=${start}&endDate=${end}&sportId=1&gameType=R&hydrate=team,linescore`;
+    const res  = await fetchWithTimeout(url, 5000);
+    const data = await res.json();
+    let last = null;
+    for (const day of (data.dates ?? [])) {
+      for (const g of (day.games ?? [])) {
+        if ((g.status?.abstractGameState ?? '').toLowerCase() === 'final') last = g;
+      }
+    }
+    return last;
+  } catch(e) {
+    console.warn('fetchLastGame failed:', e.message);
+    return null;
+  }
+}
+
+function renderLastGame(game) {
+  const box = document.getElementById('lastGameBox');
+  if (!box) return;
+  if (!game) {
+    box.innerHTML = '<span style="font-size:.78rem;color:var(--muted)">試合結果なし</span>';
+    return;
+  }
+  const isHome  = game.teams?.home?.team?.id === DODGERS_ID;
+  const dodSide = isHome ? game.teams.home : game.teams.away;
+  const oppSide = isHome ? game.teams.away : game.teams.home;
+  const dodScore = dodSide?.score ?? '?';
+  const oppScore = oppSide?.score ?? '?';
+  const isWin    = Number(dodScore) > Number(oppScore);
+  const oppName  = MLB_TEAM_JA[oppSide?.team?.name]
+                ?? MLB_TEAM_JA[oppSide?.team?.teamName]
+                ?? oppSide?.team?.name ?? '—';
+  const ha = isHome ? 'ホーム' : 'ビジター';
+
+  const gameUtc = game.gameDate ? new Date(game.gameDate) : null;
+  let dateStr = '—';
+  if (gameUtc) {
+    dateStr = gameUtc.toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      month: 'numeric', day: 'numeric', weekday: 'short',
+    });
+  }
+
+  box.innerHTML = `
+    <div class="last-game-main">
+      <div class="last-game-score">
+        <span class="lg-dod">${dodScore}</span>
+        <span class="lg-sep">-</span>
+        <span class="lg-opp">${oppScore}</span>
+      </div>
+      <div class="last-game-info">
+        <div>vs ${oppName}<span class="result-badge ${isWin?'result-win':'result-loss'}">${isWin?'勝':'負'}</span></div>
+        <div style="color:var(--muted);font-size:.72rem">${dateStr}　${ha}</div>
+      </div>
+    </div>`;
+}
 
 async function fetchNextGame() {
   try {
@@ -1497,6 +1589,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
   renderTrendCharts(year);
   fetchStandings(year).then(renderStandings);
+  fetchLastGame().then(renderLastGame);
   fetchNextGame().then(renderNextGame);
   fetchAllJPStats(year).then(renderJPStats);
 
@@ -1510,6 +1603,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
     renderTrendCharts(yr);
     fetchStandings(yr).then(renderStandings);
+    fetchLastGame().then(renderLastGame);
     fetchNextGame().then(renderNextGame);
     fetchAllJPStats(yr).then(renderJPStats);
   }, 60 * 60 * 1000);
