@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>大谷翔平 – 成績トラッカー</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <style>
@@ -35,6 +38,23 @@
       gap: 20px; transition: opacity .4s;
     }
     #loadingOverlay.hidden { opacity: 0; pointer-events: none; }
+
+    /* ── Update banner ── */
+    #updateBanner {
+      display: none;
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #1f6feb; color: #fff;
+      padding: 13px 24px; border-radius: 14px;
+      font-size: .88rem; font-weight: 700;
+      box-shadow: 0 4px 20px rgba(0,0,0,.5);
+      cursor: pointer; z-index: 9999;
+      white-space: nowrap;
+      animation: slideUp .3s ease;
+    }
+    @keyframes slideUp {
+      from { opacity:0; transform: translateX(-50%) translateY(16px); }
+      to   { opacity:1; transform: translateX(-50%) translateY(0); }
+    }
     .loading-logo {
       font-size: 3rem; font-weight: 900; letter-spacing: .05em;
       color: var(--gold);
@@ -328,6 +348,11 @@
   </style>
 </head>
 <body>
+
+<!-- Update notification banner -->
+<div id="updateBanner" onclick="window.location.reload(true)">
+  🔄 新しいバージョンがあります　→ タップして更新
+</div>
 
 <!-- Loading -->
 <div id="loadingOverlay">
@@ -1396,6 +1421,31 @@ function renderJPStats({ batStats, pitStats }) {
 }
 
 /* ══════════════════════════════════════
+   PAGE UPDATE CHECK
+   5分ごとにHTMLのLast-Modifiedを確認し
+   新しいバージョンがあればバナーを表示
+══════════════════════════════════════ */
+let _pageEtag = null;
+
+async function checkPageUpdate() {
+  try {
+    const res = await fetch(window.location.href, {
+      method: 'HEAD',
+      cache: 'no-store',
+    });
+    const tag = res.headers.get('ETag') ?? res.headers.get('Last-Modified');
+    if (!tag) return;
+    if (_pageEtag === null) {
+      _pageEtag = tag;   // 初回: 基準値を記録
+      return;
+    }
+    if (tag !== _pageEtag) {
+      document.getElementById('updateBanner').style.display = 'block';
+    }
+  } catch(e) { /* ネットワーク切断時は無視 */ }
+}
+
+/* ══════════════════════════════════════
    INIT
 ══════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', async () => {
@@ -1423,6 +1473,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   fetchStandings(year).then(renderStandings);
   fetchNextGame().then(renderNextGame);
   fetchAllJPStats(year).then(renderJPStats);
+
+  // ページ更新チェック: 初回 + 5分ごと
+  checkPageUpdate();
+  setInterval(checkPageUpdate, 5 * 60 * 1000);
 
   // 1 時間ごとに自動更新
   setInterval(async () => {
