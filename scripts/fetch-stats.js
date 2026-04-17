@@ -17,12 +17,80 @@ const MLB_PLAYER_ID = 660271; // 大谷翔平
 const BASE_URL = 'https://statsapi.mlb.com/api/v1';
 const SPORT_ID = 1; // MLB
 
-// チーム名 英語 → 日本語
+// チーム名 英語 → 日本語（大谷キャリア用）
 const TEAM_NAME_JA = {
   'Los Angeles Angels': 'エンゼルス',
   'Los Angeles Dodgers': 'ドジャース',
 };
 const toJa = (name) => TEAM_NAME_JA[name] ?? name;
+
+// チーム名 英語 → 日本語（日本人選手用・全30球団）
+const MLB_TEAM_JA_FULL = {
+  'Los Angeles Dodgers':    'LAドジャース',
+  'Los Angeles Angels':     'LAエンゼルス',
+  'New York Yankees':       'NYYヤンキース',
+  'New York Mets':          'NYMメッツ',
+  'Chicago Cubs':           'CHCカブス',
+  'Chicago White Sox':      'CWSホワイトソックス',
+  'Boston Red Sox':         'BOSレッドソックス',
+  'San Francisco Giants':   'SFGジャイアンツ',
+  'Toronto Blue Jays':      'TORブルージェイズ',
+  'Houston Astros':         'HOUアストロズ',
+  'Atlanta Braves':         'ATLブレーブス',
+  'Philadelphia Phillies':  'PHIフィリーズ',
+  'St. Louis Cardinals':    'STLカーディナルス',
+  'San Diego Padres':       'SDパドレス',
+  'Arizona Diamondbacks':   'ARIダイヤモンドバックス',
+  'Colorado Rockies':       'COLロッキーズ',
+  'Minnesota Twins':        'MINツインズ',
+  'Cleveland Guardians':    'CLEガーディアンズ',
+  'Detroit Tigers':         'DETタイガース',
+  'Kansas City Royals':     'KCロイヤルズ',
+  'Baltimore Orioles':      'BALオリオールズ',
+  'Tampa Bay Rays':         'TBレイズ',
+  'Miami Marlins':          'MIAマーリンズ',
+  'Washington Nationals':   'WASナショナルズ',
+  'Pittsburgh Pirates':     'PITパイレーツ',
+  'Cincinnati Reds':        'CINレッズ',
+  'Milwaukee Brewers':      'MILブルワーズ',
+  'Oakland Athletics':      'OAKアスレチックス',
+  'Athletics':              'OAKアスレチックス',
+  'Seattle Mariners':       'SEAマリナーズ',
+  'Texas Rangers':          'TEXレンジャーズ',
+};
+const toJaTeam = (name) => {
+  if (!name) return '—';
+  return MLB_TEAM_JA_FULL[name]
+      ?? MLB_TEAM_JA_FULL[name.split(' ').slice(-1)[0]]
+      ?? name;
+};
+
+// 日本人選手リスト
+const JP_BATTERS = [
+  { ja:'村上宗隆', search:'Munetaka Murakami' },
+  { ja:'岡本和真',  search:'Kazuma Okamoto'    },
+  { ja:'鈴木誠也',  search:'Seiya Suzuki'      },
+  { ja:'吉田正尚',  search:'Masataka Yoshida'  },
+];
+const JP_PITCHERS = [
+  { ja:'山本由伸',   search:'Yoshinobu Yamamoto' },
+  { ja:'佐々木朗希', search:'Roki Sasaki'         },
+  { ja:'今永昇太',   search:'Shota Imanaga'       },
+  { ja:'千賀滉大',   search:'Kodai Senga'         },
+  { ja:'菊池雄星',   search:'Yusei Kikuchi'       },
+  { ja:'菅野智之',   search:'Tomoyuki Sugano'     },
+  { ja:'今井達也',   search:'Tatsuya Imai'        },
+];
+
+async function resolveId(searchName) {
+  try {
+    const d = await fetchJSON(
+      `${BASE_URL}/people/search?names=${encodeURIComponent(searchName)}&sportId=1`
+    );
+    const people = (d.people ?? []).sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
+    return people[0]?.id ?? null;
+  } catch { return null; }
+}
 
 async function fetchJSON(url) {
   const res = await fetch(url, {
@@ -42,14 +110,44 @@ async function main() {
   console.log(`[${new Date().toISOString()}] 成績データ取得開始...`);
   const year = new Date().getFullYear();
 
-  const [hitSeason, pitchSeason, hitCareer, pitchCareer, hitGameLog, pitGameLog] = await Promise.all([
+  // ── 日本人選手IDを並列解決 ──────────────────────
+  const [jpBatWithId, jpPitWithId] = await Promise.all([
+    Promise.all(JP_BATTERS.map(p  => resolveId(p.search).then(id => ({ ...p, id })))),
+    Promise.all(JP_PITCHERS.map(p => resolveId(p.search).then(id => ({ ...p, id })))),
+  ]);
+
+  // ── 大谷・日本人選手の全データを並列取得 ─────────
+  const fetchJPStat = async (player, group) => {
+    if (!player.id) return { ja: player.ja, id: null, team: '—', stat: null };
+    try {
+      const d = await fetchJSON(
+        `${BASE_URL}/people/${player.id}/stats?stats=season&season=${year}&group=${group}&sportId=1`
+      );
+      const split = d.stats?.[0]?.splits?.[0];
+      return {
+        ja:   player.ja,
+        id:   player.id,
+        team: toJaTeam(split?.team?.name ?? ''),
+        stat: split?.stat ?? null,
+      };
+    } catch { return { ja: player.ja, id: player.id, team: '—', stat: null }; }
+  };
+
+  const [hitSeason, pitchSeason, hitCareer, pitchCareer, hitGameLog, pitGameLog,
+         ...jpResults] = await Promise.all([
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=season&season=${year}&group=hitting&sportId=${SPORT_ID}`),
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=season&season=${year}&group=pitching&sportId=${SPORT_ID}`),
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=yearByYear&group=hitting&sportId=${SPORT_ID}`),
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=yearByYear&group=pitching&sportId=${SPORT_ID}`),
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=gameLog&season=${year}&group=hitting&sportId=${SPORT_ID}`),
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=gameLog&season=${year}&group=pitching&sportId=${SPORT_ID}`),
+    // 日本人打者 (4名)
+    ...jpBatWithId.map(p => fetchJPStat(p, 'hitting')),
+    // 日本人投手 (7名)
+    ...jpPitWithId.map(p => fetchJPStat(p, 'pitching')),
   ]);
+  const jpBatStats = jpResults.slice(0, JP_BATTERS.length);
+  const jpPitStats = jpResults.slice(JP_BATTERS.length);
 
   // 今シーズン
   const bat = hitSeason.stats[0]?.splits[0]?.stat ?? {};
@@ -121,6 +219,10 @@ async function main() {
       batting:  batGameLogs,
       pitching: pitGameLogs,
     },
+    jpPlayers: {
+      batting:  jpBatStats,
+      pitching: jpPitStats,
+    },
     currentSeason: {
       year,
       batting: {
@@ -158,7 +260,9 @@ async function main() {
   };
 
   writeFileSync(OUTPUT_PATH, JSON.stringify(data, null, 2), 'utf8');
-  console.log(`✅ data.json に保存完了 (${careerBatting.length} 年分の打撃, ${careerPitching.length} 年分の投球, 打撃ゲームログ ${batGameLogs.length} 試合, 投球ゲームログ ${pitGameLogs.length} 登板)`);
+  const jpBatOk = jpBatStats.filter(p => p.stat).length;
+  const jpPitOk = jpPitStats.filter(p => p.stat).length;
+  console.log(`✅ data.json に保存完了 (${careerBatting.length} 年分の打撃, ${careerPitching.length} 年分の投球, 打撃ゲームログ ${batGameLogs.length} 試合, 投球ゲームログ ${pitGameLogs.length} 登板, 日本人打者 ${jpBatOk}/${JP_BATTERS.length} 名, 日本人投手 ${jpPitOk}/${JP_PITCHERS.length} 名)`);
 }
 
 main().catch(err => {

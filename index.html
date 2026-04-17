@@ -1462,15 +1462,24 @@ async function resolveMLBId(searchName) {
 }
 
 async function fetchAllJPStats(year) {
-  // ① 全選手のIDを並列で解決
+  // data.json にIDが保存されていればIDを再利用（検索APIスキップ→高速化）
+  const storedBat = lastData?.jpPlayers?.batting  ?? [];
+  const storedPit = lastData?.jpPlayers?.pitching ?? [];
+  const storedId = (list, ja) => list.find(p => p.ja === ja)?.id ?? null;
+
+  // IDが未取得の選手だけ検索APIを呼ぶ
+  const resolveWithCache = async (player, stored) => {
+    const id = storedId(stored, player.ja) ?? await resolveMLBId(player.search);
+    return { ...player, id };
+  };
+
   const [batWithId, pitWithId] = await Promise.all([
-    Promise.all(JP_BATTERS_LIST.map(p  => resolveMLBId(p.search).then(id => ({...p, id})))),
-    Promise.all(JP_PITCHERS_LIST.map(p => resolveMLBId(p.search).then(id => ({...p, id})))),
+    Promise.all(JP_BATTERS_LIST.map(p  => resolveWithCache(p, storedBat))),
+    Promise.all(JP_PITCHERS_LIST.map(p => resolveWithCache(p, storedPit))),
   ]);
 
-  // ② IDが取得できた選手の成績を並列フェッチ
   const getStats = (players, group) => Promise.all(players.map(async p => {
-    if (!p.id) return { ja:p.ja, team:'—', stat:null };
+    if (!p.id) return { ja:p.ja, id:null, team:'—', stat:null };
     try {
       const res = await fetchWithTimeout(
         `${MLB_BASE}/people/${p.id}/stats?stats=season&season=${year}&group=${group}&sportId=1`, 6000
@@ -1481,8 +1490,8 @@ async function fetchAllJPStats(year) {
       const team = MLB_TEAM_JA[teamFull]
                 ?? MLB_TEAM_JA[teamFull.split(' ').slice(-1)[0]]
                 ?? (teamFull || '—');
-      return { ja:p.ja, team, stat: split?.stat ?? null };
-    } catch(e) { return { ja:p.ja, team:'—', stat:null }; }
+      return { ja:p.ja, id:p.id, team, stat: split?.stat ?? null };
+    } catch(e) { return { ja:p.ja, id:p.id, team:'—', stat:null }; }
   }));
 
   const [batStats, pitStats] = await Promise.all([
@@ -1612,6 +1621,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   fetchStandings(year).then(renderStandings);
   fetchLastGame().then(renderLastGame);
   fetchNextGame().then(renderNextGame);
+
+  // 日本人選手: ① data.json から即時表示 → ② MLB API で最新に上書き
+  if (lastData?.jpPlayers?.batting?.length) {
+    renderJPStats({ batStats: lastData.jpPlayers.batting, pitStats: lastData.jpPlayers.pitching });
+  }
   fetchAllJPStats(year).then(renderJPStats);
 
   // ページ更新チェック: 初回 + 5分ごと
