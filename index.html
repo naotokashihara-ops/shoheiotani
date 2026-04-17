@@ -154,15 +154,36 @@
     .season-banner {
       background: linear-gradient(135deg, #001a3a, #002a5e);
       border: 1px solid var(--gold); border-radius: 16px;
-      padding: 24px 28px; margin-bottom: 28px;
-      display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+      padding: 16px 14px; margin-bottom: 20px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .sb-header {
+      display: flex; justify-content: space-between; align-items: center;
     }
     .season-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--gold); text-transform: uppercase; }
-    .season-year  { font-size: 2.4rem; font-weight: 900; line-height: 1; }
-    .season-divider { width: 1px; height: 50px; background: var(--border); }
-    .banner-stat { text-align: center; }
-    .banner-stat-value { font-size: 1.8rem; font-weight: 900; line-height: 1; }
-    .banner-stat-label { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+    .season-year  { font-size: 2rem; font-weight: 900; line-height: 1; }
+    .sb-row {
+      display: flex; align-items: center;
+      border-radius: 10px; padding: 8px 2px;
+    }
+    .sb-row.bat { background: rgba(121,192,255,.08); }
+    .sb-row.pit { background: rgba(86,211,100,.08); }
+    .sb-stat { flex: 1; text-align: center; min-width: 0; }
+    .sb-label {
+      font-size: clamp(.55rem, 2.4vw, .72rem);
+      font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .sb-val {
+      font-size: clamp(1.25rem, 5.8vw, 1.9rem);
+      font-weight: 900; line-height: 1.1;
+    }
+    .sb-sub {
+      font-size: clamp(.52rem, 1.9vw, .68rem);
+      color: var(--muted); margin-top: 1px; white-space: nowrap;
+    }
+    .sb-row.bat .sb-label, .sb-row.bat .sb-val { color: #79c0ff; }
+    .sb-row.pit .sb-label, .sb-row.pit .sb-val { color: #56d364; }
 
     /* ── Stat Cards ── */
     .cards-grid {
@@ -391,56 +412,61 @@
 
   <!-- Season Banner -->
   <div class="season-banner">
-    <div>
-      <div class="season-label">Current Season</div>
-      <div class="season-year" id="bannerYear">—</div>
-    </div>
-    <div class="season-divider"></div>
-    <div style="display:flex;gap:28px;flex-wrap:wrap">
-      <div class="banner-stat">
-        <div class="season-label" style="color:#79c0ff">⚾ 打率</div>
-        <div class="banner-stat-value" style="color:#79c0ff" id="bannerAvg">—</div>
-        <div class="banner-stat-label">AVG</div>
+    <!-- ヘッダー行 -->
+    <div class="sb-header">
+      <div>
+        <div class="season-label">Current Season</div>
+        <div class="season-year" id="bannerYear">—</div>
       </div>
-      <div class="banner-stat">
-        <div class="season-label" style="color:#79c0ff">HR</div>
-        <div class="banner-stat-value" style="color:#79c0ff" id="bannerHR">—</div>
-        <div class="banner-stat-label">本塁打</div>
-      </div>
-      <div class="banner-stat">
-        <div class="season-label" style="color:#79c0ff">RBI</div>
-        <div class="banner-stat-value" style="color:#79c0ff" id="bannerRBI">—</div>
-        <div class="banner-stat-label">打点</div>
-      </div>
-      <div class="banner-stat">
-        <div class="season-label" style="color:#79c0ff">OPS</div>
-        <div class="banner-stat-value" style="color:#79c0ff" id="bannerOPS">—</div>
-        <div class="banner-stat-label">OPS</div>
-      </div>
-      <div class="season-divider"></div>
-      <div class="banner-stat">
-        <div class="season-label" style="color:#56d364">⚾ 防御率</div>
-        <div class="banner-stat-value" style="color:#56d364" id="bannerERA">—</div>
-        <div class="banner-stat-label">ERA</div>
-      </div>
-      <div class="banner-stat">
-        <div class="season-label" style="color:#56d364">W-L</div>
-        <div class="banner-stat-value" style="color:#56d364" id="bannerWL">—</div>
-        <div class="banner-stat-label">勝敗</div>
-      </div>
-      <div class="banner-stat">
-        <div class="season-label" style="color:#56d364">SO</div>
-        <div class="banner-stat-value" style="color:#56d364" id="bannerSO">—</div>
-        <div class="banner-stat-label">奪三振</div>
-      </div>
-      <div class="banner-stat">
-        <div class="season-label" style="color:#56d364">WHIP</div>
-        <div class="banner-stat-value" style="color:#56d364" id="bannerWHIP">—</div>
-        <div class="banner-stat-label">WHIP</div>
+      <div style="font-size:.72rem;color:var(--muted);text-align:right;line-height:1.8">
+        <span id="bannerGames">—</span> 試合 &nbsp;／&nbsp; <span id="bannerPitchG">—</span> 登板
       </div>
     </div>
-    <div style="margin-left:auto;font-size:.72rem;color:var(--muted)">
-      <span id="bannerGames">—</span> 試合 / <span id="bannerPitchG">—</span> 登板
+    <!-- 打撃成績 1行 -->
+    <div class="sb-row bat">
+      <div class="sb-stat">
+        <div class="sb-label">⚾ 打率</div>
+        <div class="sb-val" id="bannerAvg">—</div>
+        <div class="sb-sub">AVG</div>
+      </div>
+      <div class="sb-stat">
+        <div class="sb-label">HR</div>
+        <div class="sb-val" id="bannerHR">—</div>
+        <div class="sb-sub">本塁打</div>
+      </div>
+      <div class="sb-stat">
+        <div class="sb-label">RBI</div>
+        <div class="sb-val" id="bannerRBI">—</div>
+        <div class="sb-sub">打点</div>
+      </div>
+      <div class="sb-stat">
+        <div class="sb-label">OPS</div>
+        <div class="sb-val" id="bannerOPS">—</div>
+        <div class="sb-sub">OPS</div>
+      </div>
+    </div>
+    <!-- 投球成績 1行 -->
+    <div class="sb-row pit">
+      <div class="sb-stat">
+        <div class="sb-label">⚾ 防御率</div>
+        <div class="sb-val" id="bannerERA">—</div>
+        <div class="sb-sub">ERA</div>
+      </div>
+      <div class="sb-stat">
+        <div class="sb-label">W-L</div>
+        <div class="sb-val" id="bannerWL">—</div>
+        <div class="sb-sub">勝敗</div>
+      </div>
+      <div class="sb-stat">
+        <div class="sb-label">SO</div>
+        <div class="sb-val" id="bannerSO">—</div>
+        <div class="sb-sub">奪三振</div>
+      </div>
+      <div class="sb-stat">
+        <div class="sb-label">WHIP</div>
+        <div class="sb-val" id="bannerWHIP">—</div>
+        <div class="sb-sub">WHIP</div>
+      </div>
     </div>
   </div>
 
