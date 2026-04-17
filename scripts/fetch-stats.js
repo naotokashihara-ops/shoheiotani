@@ -32,15 +32,23 @@ async function fetchJSON(url) {
   return res.json();
 }
 
+// 投球回 "6.1" → 小数 6.333... に変換
+function parseIP(ip) {
+  const [whole, frac = '0'] = String(ip).split('.');
+  return parseInt(whole) + parseInt(frac) / 3;
+}
+
 async function main() {
   console.log(`[${new Date().toISOString()}] 成績データ取得開始...`);
   const year = new Date().getFullYear();
 
-  const [hitSeason, pitchSeason, hitCareer, pitchCareer] = await Promise.all([
+  const [hitSeason, pitchSeason, hitCareer, pitchCareer, hitGameLog, pitGameLog] = await Promise.all([
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=season&season=${year}&group=hitting&sportId=${SPORT_ID}`),
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=season&season=${year}&group=pitching&sportId=${SPORT_ID}`),
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=yearByYear&group=hitting&sportId=${SPORT_ID}`),
     fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=yearByYear&group=pitching&sportId=${SPORT_ID}`),
+    fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=gameLog&season=${year}&group=hitting&sportId=${SPORT_ID}`),
+    fetchJSON(`${BASE_URL}/people/${MLB_PLAYER_ID}/stats?stats=gameLog&season=${year}&group=pitching&sportId=${SPORT_ID}`),
   ]);
 
   // 今シーズン
@@ -85,8 +93,34 @@ async function main() {
       whip: parseFloat(s.stat.whip ?? 0),
     }));
 
+  // 試合別ログ（グラフ用）
+  const batGameLogs = (hitGameLog.stats[0]?.splits ?? []).map(s => ({
+    date: s.date,
+    h:   s.stat.hits              ?? 0,
+    ab:  s.stat.atBats            ?? 0,
+    hr:  s.stat.homeRuns          ?? 0,
+    rbi: s.stat.rbi               ?? 0,
+    bb:  s.stat.baseOnBalls       ?? 0,
+    tb:  (s.stat.hits ?? 0) + (s.stat.doubles ?? 0)
+         + 2 * (s.stat.triples ?? 0) + 3 * (s.stat.homeRuns ?? 0),
+    pa:  s.stat.plateAppearances  ?? 0,
+  }));
+
+  const pitGameLogs = (pitGameLog.stats[0]?.splits ?? []).map(s => ({
+    date: s.date,
+    ip:  s.stat.inningsPitched ?? '0',
+    so:  s.stat.strikeOuts     ?? 0,
+    er:  s.stat.earnedRuns     ?? 0,
+    bb:  s.stat.baseOnBalls    ?? 0,
+    h:   s.stat.hits           ?? 0,
+  }));
+
   const data = {
     lastUpdated: new Date().toISOString(),
+    gameLogs: {
+      batting:  batGameLogs,
+      pitching: pitGameLogs,
+    },
     currentSeason: {
       year,
       batting: {
@@ -124,7 +158,7 @@ async function main() {
   };
 
   writeFileSync(OUTPUT_PATH, JSON.stringify(data, null, 2), 'utf8');
-  console.log(`✅ data.json に保存完了 (${careerBatting.length} 年分の打撃, ${careerPitching.length} 年分の投球)`);
+  console.log(`✅ data.json に保存完了 (${careerBatting.length} 年分の打撃, ${careerPitching.length} 年分の投球, 打撃ゲームログ ${batGameLogs.length} 試合, 投球ゲームログ ${pitGameLogs.length} 登板)`);
 }
 
 main().catch(err => {

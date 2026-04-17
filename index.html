@@ -1228,6 +1228,33 @@ function buildPitCumulative(games) {
 }
 
 /* ══════════════════════════════════════
+   data.json ゲームログ → 累積データ変換
+══════════════════════════════════════ */
+function buildBatCumFromLog(logs) {
+  let cH=0,cAB=0,cHR=0,cRBI=0,cBB=0,cTB=0,cPA=0;
+  return logs.map(g => {
+    cH+=g.h; cAB+=g.ab; cHR+=g.hr; cRBI+=g.rbi; cBB+=g.bb; cTB+=g.tb; cPA+=g.pa;
+    const avg = cAB ? cH/cAB : 0;
+    const obp = cPA ? (cH+cBB)/cPA : 0;
+    const slg = cAB ? cTB/cAB : 0;
+    const label = (g.date ?? '').slice(5).replace('-','/');
+    return { d:label, avg:+avg.toFixed(3), hr:cHR, rbi:cRBI, ops:+(obp+slg).toFixed(3) };
+  });
+}
+
+function buildPitCumFromLog(logs) {
+  let pIP=0,pSO=0,pER=0,pBB=0,pH=0;
+  return logs.map(g => {
+    const ipDec = parseIP(g.ip ?? '0');
+    pIP+=ipDec; pSO+=g.so; pER+=g.er; pBB+=g.bb; pH+=g.h;
+    const era  = pIP ? +(pER*9/pIP).toFixed(2) : 0;
+    const whip = pIP ? +((pH+pBB)/pIP).toFixed(2) : 0;
+    const label = (g.date ?? '').slice(5).replace('-','/');
+    return { d:label, era, whip, so:pSO, ip:+pIP.toFixed(1) };
+  });
+}
+
+/* ══════════════════════════════════════
    FETCH GAME LOGS FROM MLB API
 ══════════════════════════════════════ */
 async function fetchGameLogs(year) {
@@ -1296,10 +1323,14 @@ function renderCharts() {
 }
 
 async function renderTrendCharts(year) {
-  // ① まず静的データで即描画（API待ちなし）
-  _drawTrendCharts(buildBatCumulative(BAT_GAMES_FB), buildPitCumulative(PIT_GAMES_FB));
+  // ① data.json のゲームログが既にある場合はそちらを優先描画（静的フォールバックより正確）
+  const jsonBatLogs = lastData?.gameLogs?.batting  ?? [];
+  const jsonPitLogs = lastData?.gameLogs?.pitching ?? [];
+  const initBat = jsonBatLogs.length ? buildBatCumFromLog(jsonBatLogs) : buildBatCumulative(BAT_GAMES_FB);
+  const initPit = jsonPitLogs.length ? buildPitCumFromLog(jsonPitLogs) : buildPitCumulative(PIT_GAMES_FB);
+  _drawTrendCharts(initBat, initPit);
 
-  // ② バックグラウンドでAPI取得→上書き
+  // ② バックグラウンドでMLB API取得→最新試合まで上書き
   try {
     const { batCum, pitCum, source } = await fetchGameLogs(year);
     _drawTrendCharts(batCum, pitCum);
