@@ -775,7 +775,7 @@ async function loadData(manual = false) {
   }
 
   lastData = data;
-  render(data, source);
+  try { render(data, source); } catch(e) { console.warn('render error:', e); }
 
   btn.disabled = false;
   spinner.style.display = 'none';
@@ -788,7 +788,7 @@ async function loadData(manual = false) {
       if (!cs || !lastData) return;
       lastData.currentSeason.batting  = cs.batting;
       lastData.currentSeason.pitching = cs.pitching;
-      render(lastData, 'live');
+      try { render(lastData, 'live'); } catch(e) { console.warn('render error (live):', e); }
     }).catch(() => {});
   }
 }
@@ -1222,7 +1222,9 @@ function renderTable(mode, career) {
    AWARDS
 ══════════════════════════════════════ */
 function renderAwards() {
-  document.getElementById('awardsGrid').innerHTML = AWARDS.map(a => `
+  const el = document.getElementById('awardsGrid');
+  if (!el) return; // 要素が存在しない場合はスキップ
+  el.innerHTML = AWARDS.map(a => `
     <div class="award-card">
       <div class="award-icon">${a.icon}</div>
       <div><div class="award-name">${a.name}</div><div class="award-year">${a.years}</div></div>
