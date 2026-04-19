@@ -786,8 +786,26 @@ async function loadData(manual = false) {
   if (source === 'cache') {
     fetchCurrentSeasonLive().then(cs => {
       if (!cs || !lastData) return;
+
+      // ① CURRENT SEASON バナーを更新
       lastData.currentSeason.batting  = cs.batting;
       lastData.currentSeason.pitching = cs.pitching;
+
+      // ② 年度別成績の現在年（2026）行も最新値に更新
+      const curYear = String(new Date().getFullYear());
+      const b = cs.batting, p = cs.pitching;
+      const curBat = lastData.career?.batting?.find(r => String(r.year) === curYear);
+      if (curBat) {
+        curBat.g=b.g; curBat.avg=b.avg; curBat.ab=b.ab; curBat.h=b.h;
+        curBat.hr=b.hr; curBat.rbi=b.rbi; curBat.r=b.r; curBat.so=b.so;
+        curBat.sb=b.sb; curBat.pa=b.pa; curBat.obp=b.obp; curBat.slg=b.slg; curBat.ops=b.ops;
+      }
+      const curPit = lastData.career?.pitching?.find(r => String(r.year) === curYear);
+      if (curPit) {
+        curPit.era=p.era; curPit.g=p.g; curPit.gs=p.gs; curPit.w=p.w; curPit.l=p.l;
+        curPit.ip=p.ip; curPit.so=p.so; curPit.bb=p.bb; curPit.h=p.h; curPit.whip=p.whip;
+      }
+
       try { render(lastData, 'live'); } catch(e) { console.warn('render error (live):', e); }
     }).catch(() => {});
   }
