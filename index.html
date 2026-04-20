@@ -6,8 +6,24 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
+  <!-- ── Security headers ── -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src  'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    style-src   'self' 'unsafe-inline';
+    connect-src https://statsapi.mlb.com https://naotokashihara-ops.github.io;
+    img-src     'self' data: https:;
+    font-src    'self';
+    frame-ancestors 'none';
+    base-uri    'self';
+    form-action 'none';
+  " />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>大谷翔平 – 成績トラッカー</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <!-- SRI hash で CDN スクリプトの改ざんを検知 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"
+          integrity="sha384-e6cc9LaIG7xZ3XD5B+jtr1NhTWPQGQdRCh6xiZ+ZFUtWCpg4ycv3Sh+SkZoopvUY"
+          crossorigin="anonymous"></script>
   <style>
     :root {
       --blue:   #005A9C;
@@ -629,6 +645,12 @@ const AWARDS = [
 /* ══════════════════════════════════════
    MLB STATS API
 ══════════════════════════════════════ */
+/* ── XSS対策: APIデータをHTMLに埋め込む前に必ずエスケープ ── */
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
 const MLB_ID   = 660271;
 const MLB_BASE = 'https://statsapi.mlb.com/api/v1';
 const TEAM_JA  = { 'Los Angeles Angels':'エンゼルス', 'Los Angeles Dodgers':'ドジャース' };
@@ -935,16 +957,16 @@ function renderStandings(records) {
   }
   tbody.innerHTML = records.map((r, i) => {
     const isDodgers = r.team?.id === DODGERS_ID;
-    const name   = TEAM_SHORT[r.team?.name] ?? r.team?.name ?? '-';
-    const gb     = r.gamesBack === '-' ? '—' : (r.gamesBack ?? '—');
-    const streak = r.streak?.streakCode ?? '-';
+    const name   = esc(TEAM_SHORT[r.team?.name] ?? r.team?.name ?? '-');
+    const gb     = esc(r.gamesBack === '-' ? '—' : (r.gamesBack ?? '—'));
+    const streak = esc(r.streak?.streakCode ?? '-');
     const isWin  = streak.startsWith('W');
     return `<tr class="${isDodgers ? 'dodgers-row' : ''}">
       <td style="color:var(--muted);font-weight:700">${i + 1}</td>
       <td class="${isDodgers ? 'dodgers-name' : ''}">${name}</td>
-      <td>${r.wins ?? '-'}</td>
-      <td>${r.losses ?? '-'}</td>
-      <td>${r.winningPercentage ?? '-'}</td>
+      <td>${+(r.wins ?? 0)}</td>
+      <td>${+(r.losses ?? 0)}</td>
+      <td>${esc(r.winningPercentage ?? '-')}</td>
       <td style="color:var(--muted)">${gb}</td>
       <td class="${isWin ? 'win-streak' : 'lose-streak'}">${streak}</td>
     </tr>`;
@@ -1026,9 +1048,9 @@ function renderLastGame(game) {
   const dodScore = dodSide?.score ?? '?';
   const oppScore = oppSide?.score ?? '?';
   const isWin    = Number(dodScore) > Number(oppScore);
-  const oppName  = MLB_TEAM_JA[oppSide?.team?.name]
+  const oppName  = esc(MLB_TEAM_JA[oppSide?.team?.name]
                 ?? MLB_TEAM_JA[oppSide?.team?.teamName]
-                ?? oppSide?.team?.name ?? '—';
+                ?? oppSide?.team?.name ?? '—');
   const ha = isHome ? 'ホーム' : 'ビジター';
 
   const gameUtc = game.gameDate ? new Date(game.gameDate) : null;
@@ -1043,13 +1065,13 @@ function renderLastGame(game) {
   box.innerHTML = `
     <div class="last-game-main">
       <div class="last-game-score">
-        <span class="lg-dod">${dodScore}</span>
+        <span class="lg-dod">${+dodScore || 0}</span>
         <span class="lg-sep">-</span>
-        <span class="lg-opp">${oppScore}</span>
+        <span class="lg-opp">${+oppScore || 0}</span>
       </div>
       <div class="last-game-info">
         <div>vs ${oppName}<span class="result-badge ${isWin?'result-win':'result-loss'}">${isWin?'勝':'負'}</span></div>
-        <div style="color:var(--muted);font-size:.72rem">${dateStr}　${ha}</div>
+        <div style="color:var(--muted);font-size:.72rem">${esc(dateStr)}　${ha}</div>
       </div>
     </div>`;
 }
@@ -1090,8 +1112,8 @@ function renderNextGame(game) {
   }
   const isHome   = game.teams?.home?.team?.id === DODGERS_ID;
   const opponent = isHome ? game.teams?.away?.team : game.teams?.home?.team;
-  const oppName  = MLB_TEAM_JA[opponent?.name] ?? MLB_TEAM_JA[opponent?.teamName] ?? opponent?.name ?? '—';
-  const venue    = game.venue?.name ?? '—';
+  const oppName  = esc(MLB_TEAM_JA[opponent?.name] ?? MLB_TEAM_JA[opponent?.teamName] ?? opponent?.name ?? '—');
+  const venue    = esc(game.venue?.name ?? '—');
   const ha       = isHome ? '🏠 ホーム' : '✈️ ビジター';
 
   // Convert UTC datetime to JST
@@ -1108,7 +1130,7 @@ function renderNextGame(game) {
   box.innerHTML = `
     <div class="next-game-badge">VS ${oppName}</div>
     <div class="next-game-info">
-      <div>${dateStr}</div>
+      <div>${esc(dateStr)}</div>
       <div><span>${ha}　</span>${venue}</div>
     </div>`;
 }
@@ -1168,7 +1190,7 @@ function renderCards(id, stats, rankings = {}) {
     const showEntry   = isFirst ? rk?.second : rk?.leader;
     const showLabel   = isFirst ? '2位' : '1位';
     const leaderHtml  = showEntry
-      ? `<div class="card-leader">${showLabel}: <strong>${showEntry.name}</strong> ${showEntry.value}</div>`
+      ? `<div class="card-leader">${showLabel}: <strong>${esc(showEntry.name)}</strong> ${esc(String(showEntry.value))}</div>`
       : '';
     return `
     <div class="stat-card ${s.type}">
@@ -1203,17 +1225,17 @@ function renderTable(mode, career) {
       <th>出塁率</th><th>長打率</th><th>OPS</th><th>三振</th><th>盗塁</th>
     </tr></thead><tbody>${career.batting.slice().reverse().map(r => `
       <tr class="${r.current?'current-season':''}">
-        <td>${r.year}${r.current?' ★':''}</td>
-        <td>${r.team}</td>
-        <td>${r.g}</td>
-        <td class="hl">${typeof r.avg === 'number' ? r.avg.toFixed(3) : r.avg}</td>
-        <td>${r.ab}</td><td>${r.h}</td>
-        <td class="hl">${r.hr}</td>
-        <td>${r.rbi}</td><td>${r.r}</td>
-        <td>${typeof r.obp === 'number' ? r.obp.toFixed(3) : r.obp}</td>
-        <td>${typeof r.slg === 'number' ? r.slg.toFixed(3) : r.slg}</td>
-        <td class="hl">${typeof r.ops === 'number' ? r.ops.toFixed(3) : r.ops}</td>
-        <td>${r.so}</td><td>${r.sb}</td>
+        <td>${+r.year}${r.current?' ★':''}</td>
+        <td>${esc(r.team)}</td>
+        <td>${+r.g}</td>
+        <td class="hl">${typeof r.avg === 'number' ? r.avg.toFixed(3) : esc(r.avg)}</td>
+        <td>${+r.ab}</td><td>${+r.h}</td>
+        <td class="hl">${+r.hr}</td>
+        <td>${+r.rbi}</td><td>${+r.r}</td>
+        <td>${typeof r.obp === 'number' ? r.obp.toFixed(3) : esc(r.obp)}</td>
+        <td>${typeof r.slg === 'number' ? r.slg.toFixed(3) : esc(r.slg)}</td>
+        <td class="hl">${typeof r.ops === 'number' ? r.ops.toFixed(3) : esc(r.ops)}</td>
+        <td>${+r.so}</td><td>${+r.sb}</td>
       </tr>`).join('')}</tbody></table>`;
   } else {
     el.innerHTML = `<table><thead><tr>
@@ -1223,15 +1245,15 @@ function renderTable(mode, career) {
       <th>与四球</th><th>被安打</th><th>WHIP</th>
     </tr></thead><tbody>${career.pitching.slice().reverse().map(r => `
       <tr class="${r.current?'current-season':''}">
-        <td>${r.year}${r.current?' ★':''}</td>
-        <td>${r.team}</td>
-        <td>${r.g}</td><td>${r.gs}</td>
-        <td>${r.w}</td><td>${r.l}</td>
-        <td class="hl g">${typeof r.era === 'number' ? r.era.toFixed(2) : r.era}</td>
-        <td>${r.ip}</td>
-        <td class="hl g">${r.so}</td>
-        <td>${r.bb}</td><td>${r.h}</td>
-        <td class="hl g">${typeof r.whip === 'number' ? r.whip.toFixed(2) : r.whip}</td>
+        <td>${+r.year}${r.current?' ★':''}</td>
+        <td>${esc(r.team)}</td>
+        <td>${+r.g}</td><td>${+r.gs}</td>
+        <td>${+r.w}</td><td>${+r.l}</td>
+        <td class="hl g">${typeof r.era === 'number' ? r.era.toFixed(2) : esc(r.era)}</td>
+        <td>${esc(String(r.ip))}</td>
+        <td class="hl g">${+r.so}</td>
+        <td>${+r.bb}</td><td>${+r.h}</td>
+        <td class="hl g">${typeof r.whip === 'number' ? r.whip.toFixed(2) : esc(r.whip)}</td>
       </tr>`).join('')}</tbody></table>`;
   }
 }
@@ -1586,20 +1608,20 @@ function renderJPStats({ batStats, pitStats }) {
       if (!p.stat) return noData(p.ja, 13);
       const s = p.stat;
       return `<tr>
-        <td style="font-weight:700;color:var(--gold)">${p.ja}</td>
-        <td>${p.team}</td>
-        <td>${s.gamesPlayed??0}</td>
-        <td class="hl">${fmtAvg(s.avg)}</td>
-        <td>${s.atBats??0}</td>
-        <td>${s.hits??0}</td>
-        <td class="hl">${s.homeRuns??0}</td>
-        <td>${s.rbi??0}</td>
-        <td>${s.runs??0}</td>
-        <td>${fmtAvg(s.obp)}</td>
-        <td>${fmtAvg(s.slg)}</td>
-        <td class="hl">${fmtAvg(s.ops)}</td>
-        <td>${s.strikeOuts??0}</td>
-        <td>${s.stolenBases??0}</td>
+        <td style="font-weight:700;color:var(--gold)">${esc(p.ja)}</td>
+        <td>${esc(p.team)}</td>
+        <td>${+(s.gamesPlayed??0)}</td>
+        <td class="hl">${esc(fmtAvg(s.avg))}</td>
+        <td>${+(s.atBats??0)}</td>
+        <td>${+(s.hits??0)}</td>
+        <td class="hl">${+(s.homeRuns??0)}</td>
+        <td>${+(s.rbi??0)}</td>
+        <td>${+(s.runs??0)}</td>
+        <td>${esc(fmtAvg(s.obp))}</td>
+        <td>${esc(fmtAvg(s.slg))}</td>
+        <td class="hl">${esc(fmtAvg(s.ops))}</td>
+        <td>${+(s.strikeOuts??0)}</td>
+        <td>${+(s.stolenBases??0)}</td>
       </tr>`;
     }).join('')}
     </tbody></table>`;
@@ -1616,18 +1638,18 @@ function renderJPStats({ batStats, pitStats }) {
       if (!p.stat) return noData(p.ja, 11);
       const s = p.stat;
       return `<tr>
-        <td style="font-weight:700;color:var(--gold)">${p.ja}</td>
-        <td>${p.team}</td>
-        <td>${s.gamesPlayed??0}</td>
-        <td>${s.gamesStarted??0}</td>
-        <td>${s.wins??0}</td>
-        <td>${s.losses??0}</td>
-        <td class="hl g">${fmtEra(s.era)}</td>
-        <td>${s.inningsPitched??'0.0'}</td>
-        <td class="hl g">${s.strikeOuts??0}</td>
-        <td>${s.baseOnBalls??0}</td>
-        <td>${s.hits??0}</td>
-        <td class="hl g">${fmtEra(s.whip)}</td>
+        <td style="font-weight:700;color:var(--gold)">${esc(p.ja)}</td>
+        <td>${esc(p.team)}</td>
+        <td>${+(s.gamesPlayed??0)}</td>
+        <td>${+(s.gamesStarted??0)}</td>
+        <td>${+(s.wins??0)}</td>
+        <td>${+(s.losses??0)}</td>
+        <td class="hl g">${esc(fmtEra(s.era))}</td>
+        <td>${esc(String(s.inningsPitched??'0.0'))}</td>
+        <td class="hl g">${+(s.strikeOuts??0)}</td>
+        <td>${+(s.baseOnBalls??0)}</td>
+        <td>${+(s.hits??0)}</td>
+        <td class="hl g">${esc(fmtEra(s.whip))}</td>
       </tr>`;
     }).join('')}
     </tbody></table>`;
