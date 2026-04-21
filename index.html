@@ -592,6 +592,34 @@
     </div>
   </div>
 
+  <!-- ── フォトギャラリー ── -->
+  <p class="section-title" style="margin-top:28px">📷 フォトギャラリー</p>
+  <div class="panel" id="galleryPanel">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <label id="uploadLabel" for="imageUpload" style="
+        display:inline-flex;align-items:center;gap:7px;
+        background:var(--card2);border:1.5px dashed var(--border);
+        color:var(--muted);border-radius:10px;padding:9px 18px;
+        font-size:.82rem;font-weight:600;cursor:pointer;
+        transition:border-color .2s,color .2s;white-space:nowrap;
+      " onmouseover="this.style.borderColor='#58a6ff';this.style.color='#58a6ff'"
+         onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+        ＋ 画像を追加（JPEG / PNG）
+      </label>
+      <input type="file" id="imageUpload" accept="image/jpeg,image/png"
+             multiple style="display:none" onchange="handleImageUpload(event)" />
+      <span id="galleryCount" style="font-size:.75rem;color:var(--muted)"></span>
+    </div>
+    <div id="galleryGrid" style="
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));
+      gap:12px;
+    "></div>
+    <p id="galleryEmpty" style="text-align:center;color:var(--muted);font-size:.82rem;padding:20px 0">
+      画像が追加されていません。上のボタンからアップロードしてください。
+    </p>
+  </div>
+
 </main>
 
 <script>
@@ -1729,7 +1757,187 @@ window.addEventListener('DOMContentLoaded', async () => {
     fetchNextGame().then(renderNextGame);
     fetchAllJPStats(yr).then(renderJPStats);
   }, 60 * 60 * 1000);
+
+  // フォトギャラリー初期化
+  loadGallery();
 });
+
+/* ══════════════════════════════════════
+   📷 PHOTO GALLERY
+══════════════════════════════════════ */
+const GALLERY_KEY = 'ohtani_gallery_v1';
+const GALLERY_MAX = 50; // 最大枚数
+
+/** localStorage から画像リストを読み込んで表示 */
+function loadGallery() {
+  const grid  = document.getElementById('galleryGrid');
+  const empty = document.getElementById('galleryEmpty');
+  const count = document.getElementById('galleryCount');
+  if (!grid) return;
+
+  const items = getGalleryItems();
+  grid.innerHTML = '';
+
+  if (items.length === 0) {
+    empty.style.display = 'block';
+    count.textContent   = '';
+    return;
+  }
+
+  empty.style.display = 'none';
+  count.textContent   = `${items.length} 枚`;
+
+  items.forEach((item, idx) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = `
+      position:relative;border-radius:12px;overflow:hidden;
+      background:var(--card2);
+      box-shadow:0 2px 8px rgba(0,0,0,.35);
+      aspect-ratio:4/3;
+    `;
+
+    const img = document.createElement('img');
+    img.src   = item.src;
+    img.alt   = esc(item.name ?? '');
+    img.style.cssText = `
+      width:100%;height:100%;object-fit:cover;
+      display:block;transition:opacity .3s;
+    `;
+    img.loading = 'lazy';
+
+    // 削除ボタン
+    const del = document.createElement('button');
+    del.textContent  = '✕';
+    del.title        = '削除';
+    del.style.cssText = `
+      position:absolute;top:7px;right:7px;
+      width:28px;height:28px;border-radius:50%;border:none;
+      background:rgba(0,0,0,.65);color:#fff;
+      font-size:13px;line-height:1;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+      opacity:0;transition:opacity .2s;
+      z-index:2;
+    `;
+    del.addEventListener('click', () => deleteGalleryItem(idx));
+
+    // キャプション（ファイル名）
+    const cap = document.createElement('div');
+    cap.textContent  = item.name ?? '';
+    cap.style.cssText = `
+      position:absolute;bottom:0;left:0;right:0;
+      padding:6px 10px;font-size:.68rem;color:#e0e0e0;
+      background:linear-gradient(transparent,rgba(0,0,0,.7));
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+      opacity:0;transition:opacity .2s;
+    `;
+
+    // ホバーで削除ボタン & キャプション表示
+    wrap.addEventListener('mouseenter', () => {
+      del.style.opacity = '1';
+      cap.style.opacity = '1';
+    });
+    wrap.addEventListener('mouseleave', () => {
+      del.style.opacity = '0';
+      cap.style.opacity = '0';
+    });
+    // タッチ端末: タップで表示トグル
+    wrap.addEventListener('touchstart', (e) => {
+      const on = del.style.opacity === '1';
+      del.style.opacity = on ? '0' : '1';
+      cap.style.opacity = on ? '0' : '1';
+    }, { passive: true });
+
+    wrap.appendChild(img);
+    wrap.appendChild(del);
+    wrap.appendChild(cap);
+    grid.appendChild(wrap);
+  });
+}
+
+/** localStorage から画像リストを取得 */
+function getGalleryItems() {
+  try {
+    return JSON.parse(localStorage.getItem(GALLERY_KEY) ?? '[]');
+  } catch { return []; }
+}
+
+/** 画像リストを localStorage に保存 */
+function saveGalleryItems(items) {
+  try {
+    localStorage.setItem(GALLERY_KEY, JSON.stringify(items));
+  } catch (e) {
+    // quota exceeded など
+    alert('ストレージの空き容量が不足しています。不要な画像を削除してから再試行してください。');
+  }
+}
+
+/** ファイル input の change イベントハンドラ */
+function handleImageUpload(event) {
+  const files = Array.from(event.target.files ?? []);
+  if (!files.length) return;
+
+  const items = getGalleryItems();
+  const remaining = GALLERY_MAX - items.length;
+
+  if (remaining <= 0) {
+    alert(`最大 ${GALLERY_MAX} 枚まで登録できます。不要な画像を削除してください。`);
+    event.target.value = '';
+    return;
+  }
+
+  const toProcess = files.slice(0, remaining);
+  if (files.length > remaining) {
+    alert(`一度に追加できる枚数を超えています。先頭 ${remaining} 枚のみ追加します。`);
+  }
+
+  let done = 0;
+  toProcess.forEach(file => {
+    if (!['image/jpeg', 'image/png'].includes(file.type)) { done++; return; }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target.result;
+      // 大きすぎる画像はリサイズして base64 サイズを抑える
+      compressImage(src, 1200, 0.82, (compressed) => {
+        items.push({ src: compressed, name: file.name, ts: Date.now() });
+        done++;
+        if (done === toProcess.length) {
+          saveGalleryItems(items);
+          loadGallery();
+        }
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // input をリセット（同じファイルを再選択できるように）
+  event.target.value = '';
+}
+
+/** Canvas でリサイズ圧縮して base64 を返す */
+function compressImage(dataUrl, maxWidth, quality, callback) {
+  const img = new Image();
+  img.onload = () => {
+    let w = img.width, h = img.height;
+    if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    callback(canvas.toDataURL('image/jpeg', quality));
+  };
+  img.src = dataUrl;
+}
+
+/** 指定インデックスの画像を削除 */
+function deleteGalleryItem(idx) {
+  const items = getGalleryItems();
+  items.splice(idx, 1);
+  saveGalleryItems(items);
+  loadGallery();
+}
 </script>
 </body>
 </html>
