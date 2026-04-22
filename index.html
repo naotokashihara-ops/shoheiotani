@@ -351,6 +351,7 @@
     .dot.blue  { background: #58a6ff; }
     .dot.green { background: #3fb950; }
     .dot.gold  { background: var(--gold); }
+    .dot.red   { background: #f85149; }
 
     .chart-wrap { position: relative; height: 240px; }
 
@@ -623,6 +624,17 @@
     <div id="jpPitTable" class="table-wrap">
       <p style="text-align:center;padding:20px;color:var(--muted);font-size:.82rem">読み込み中…</p>
     </div>
+  </div>
+
+  <!-- 全地区順位表 -->
+  <p class="section-title" style="margin-top:36px">🏆 MLB 全地区順位表</p>
+  <div id="allDivisionsGrid" style="
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(min(100%,460px),1fr));
+    gap:16px;
+    margin-bottom:32px;
+  ">
+    <div class="standings-card" style="text-align:center;color:var(--muted);padding:24px">読み込み中…</div>
   </div>
 
 </main>
@@ -946,29 +958,31 @@ const TEAM_SHORT  = {
   'Rockies':   'COロッキーズ',
 };
 
+/* 全6地区の順位データを一括取得（AL+NL）*/
 async function fetchStandings(year) {
   try {
     const res  = await fetchWithTimeout(
-      `${MLB_BASE}/standings?leagueId=104&season=${year}&standingsTypes=regularSeason`, 5000
+      `${MLB_BASE}/standings?leagueId=103,104&season=${year}&standingsTypes=regularSeason`, 6000
     );
     const data = await res.json();
-    const nlWest = (data.records ?? []).find(r => r.division?.id === NL_WEST_ID);
-    return nlWest?.teamRecords ?? [];
+    const all = {};
+    for (const rec of (data.records ?? [])) {
+      const divId = rec.division?.id;
+      if (divId) all[divId] = rec.teamRecords ?? [];
+    }
+    return all;
   } catch (e) {
     console.warn('Standings fetch failed:', e.message);
-    return [];
+    return {};
   }
 }
 
-function renderStandings(records) {
-  const tbody = document.getElementById('standingsBody');
-  if (!records.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">データ取得できませんでした</td></tr>';
-    return;
-  }
-  tbody.innerHTML = records.map((r, i) => {
+/* 共通: 1地区分の tbody 行を生成 */
+function standingsRows(records) {
+  if (!records?.length) return '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">データ取得できませんでした</td></tr>';
+  return records.map((r, i) => {
     const isDodgers = r.team?.id === DODGERS_ID;
-    const name   = esc(TEAM_SHORT[r.team?.name] ?? r.team?.name ?? '-');
+    const name   = esc(TEAM_SHORT[r.team?.name] ?? MLB_TEAM_JA[r.team?.name] ?? r.team?.name ?? '-');
     const gb     = esc(r.gamesBack === '-' ? '—' : (r.gamesBack ?? '—'));
     const streak = esc(r.streak?.streakCode ?? '-');
     const isWin  = streak.startsWith('W');
@@ -982,8 +996,50 @@ function renderStandings(records) {
       <td class="${isWin ? 'win-streak' : 'lose-streak'}">${streak}</td>
     </tr>`;
   }).join('');
+}
+
+/* NL West（既存パネル内）を更新 */
+function renderStandings(allRecords) {
+  const records = allRecords[NL_WEST_ID] ?? [];
+  const tbody = document.getElementById('standingsBody');
+  if (tbody) tbody.innerHTML = standingsRows(records);
   const el = document.getElementById('standingsUpdated');
   if (el) el.textContent = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) + ' JST 更新';
+}
+
+/* ページ下部: 残り5地区を描画 */
+const DIV_ORDER_BOTTOM = [
+  { id:204, label:'NL イースト',    dot:'blue' },
+  { id:205, label:'NL セントラル',  dot:'blue' },
+  { id:201, label:'AL イースト',    dot:'red'  },
+  { id:202, label:'AL セントラル',  dot:'red'  },
+  { id:200, label:'AL ウエスト',    dot:'red'  },
+];
+
+function renderAllDivisions(allRecords) {
+  const grid = document.getElementById('allDivisionsGrid');
+  if (!grid) return;
+  const updatedAt = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) + ' JST 更新';
+  grid.innerHTML = DIV_ORDER_BOTTOM.map(div => {
+    const records = allRecords[div.id] ?? [];
+    return `
+      <div class="standings-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="panel-title" style="margin:0">
+            <div class="dot ${div.dot}"></div>${esc(div.label)}
+          </div>
+          <span style="font-size:.7rem;color:var(--muted)">${updatedAt}</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="standings-table">
+            <thead><tr>
+              <th>#</th><th>チーム</th><th>勝</th><th>負</th><th>勝率</th><th>GB</th><th>連続</th>
+            </tr></thead>
+            <tbody>${standingsRows(records)}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 /* ══════════════════════════════════════
@@ -1951,7 +2007,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // 推移グラフ・順位表はオーバーレイ解除後に独立して描画
   const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
   renderTrendCharts(year);
-  fetchStandings(year).then(renderStandings);
+  fetchStandings(year).then(all => { renderStandings(all); renderAllDivisions(all); });
   fetchLastGame().then(game => {
     renderLastGame(game);
     if (game?.gamePk) {
@@ -1980,7 +2036,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     try { await loadData(); } catch (e) { console.warn('Auto-refresh error:', e); }
     const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
     renderTrendCharts(yr);
-    fetchStandings(yr).then(renderStandings);
+    fetchStandings(yr).then(all => { renderStandings(all); renderAllDivisions(all); });
     fetchLastGame().then(game => {
       renderLastGame(game);
       if (game?.gamePk) {
