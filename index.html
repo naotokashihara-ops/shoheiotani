@@ -224,8 +224,9 @@
     .rank-2 { background:rgba(192,192,192,.15); color:#c0c0c0; }
     .rank-3 { background:rgba(205,127,50,.2); color:#cd7f32; }
     .rank-n { background:rgba(139,148,158,.12); color:var(--muted); }
-    .card-leader { font-size:.63rem; color:var(--muted); margin-top:7px; padding-top:6px; border-top:1px solid var(--border); line-height:1.5; }
+    .card-leader { font-size:.63rem; color:var(--muted); margin-top:7px; padding-top:6px; border-top:1px solid var(--border); line-height:1.6; }
     .card-leader strong { color:var(--text); }
+    .card-leader-sm { font-size:.58rem; }
 
     /* Skeleton */
     .skeleton {
@@ -1333,14 +1334,20 @@ async function fetchNLRankings(year) {
     for (const group of [...(bData.leagueLeaders ?? []), ...(pData.leagueLeaders ?? [])]) {
       const cat     = group.leaderCategory;
       const leaders = group.leaders ?? [];
-      const top     = leaders[0];
-      const second  = leaders[1];
       const ohtani  = leaders.find(l => l.person?.id === 660271);
-      if (top) {
+      // 1位タイ全員 (rank===1)
+      const tiedAtTop = leaders
+        .filter(l => l.rank === 1)
+        .map(l => ({ name: shortName(l.person?.fullName), value: l.value ?? '', id: l.person?.id }));
+      // 2位（1位タイ以外の最上位）
+      const secondEntry = leaders.find(l => l.rank === 2);
+      if (tiedAtTop.length) {
         rankings[cat] = {
-          rank:   ohtani?.rank ?? null,
-          leader: { name: shortName(top.person?.fullName),    value: top.value    ?? '' },
-          second: second ? { name: shortName(second.person?.fullName), value: second.value ?? '' } : null,
+          rank:       ohtani?.rank ?? null,
+          tiedAtTop,
+          second:     secondEntry
+            ? { name: shortName(secondEntry.person?.fullName), value: secondEntry.value ?? '' }
+            : null,
         };
       }
     }
@@ -1361,12 +1368,42 @@ function renderCards(id, stats, rankings = {}) {
     const rankHtml = rk?.rank
       ? `<span class="rank-badge ${rankClass}">NL ${rk.rank}位</span>`
       : '';
-    const isFirst     = rk?.rank === 1;
-    const showEntry   = isFirst ? rk?.second : rk?.leader;
-    const showLabel   = isFirst ? '2位' : '1位';
-    const leaderHtml  = showEntry
-      ? `<div class="card-leader">${showLabel}: <strong>${esc(showEntry.name)}</strong> ${esc(String(showEntry.value))}</div>`
-      : '';
+
+    let leaderHtml = '';
+    if (rk) {
+      const isFirst   = rk.rank === 1;
+      const tiedAtTop = rk.tiedAtTop ?? [];
+      const lines     = [];
+
+      if (isFirst) {
+        // 大谷以外の1位タイ選手
+        const others = tiedAtTop.filter(l => l.id !== MLB_ID);
+        if (others.length > 0) {
+          const val   = esc(String(others[0].value));
+          const names = others.map(l => `<strong>${esc(l.name)}</strong>`).join('・');
+          lines.push(`1位タイ: ${names} ${val}`);
+        }
+        // 2位
+        if (rk.second) {
+          lines.push(`2位: <strong>${esc(rk.second.name)}</strong> ${esc(String(rk.second.value))}`);
+        }
+      } else {
+        // 1位タイ全員表示
+        if (tiedAtTop.length === 1) {
+          lines.push(`1位: <strong>${esc(tiedAtTop[0].name)}</strong> ${esc(String(tiedAtTop[0].value))}`);
+        } else if (tiedAtTop.length > 1) {
+          const val   = esc(String(tiedAtTop[0].value));
+          const names = tiedAtTop.map(l => `<strong>${esc(l.name)}</strong>`).join('・');
+          lines.push(`1位タイ: ${names} ${val}`);
+        }
+      }
+
+      if (lines.length) {
+        const multiClass = lines.join('').length > 60 ? ' card-leader-sm' : '';
+        leaderHtml = `<div class="card-leader${multiClass}">${lines.join('<br>')}</div>`;
+      }
+    }
+
     return `
     <div class="stat-card ${s.type}">
       <div class="card-header">
