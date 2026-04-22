@@ -915,33 +915,11 @@ function render(data, source) {
 
   // NL Rankings（非同期で取得して後からカードを更新）
   const year = cs.year ?? new Date().getFullYear();
-  const BAT_STATS = [
-    { label:'打率',   value: bat.avg,  sub: `${bat.g}試合`,  type:'batting',  cat:'battingAverage'     },
-    { label:'本塁打', value: bat.hr,   sub: 'HR',            type:'batting',  cat:'homeRuns'           },
-    { label:'打点',   value: bat.rbi,  sub: 'RBI',           type:'batting',  cat:'runsBattedIn'       },
-    { label:'安打',   value: bat.h,    sub: `${bat.ab}打数`, type:'batting',  cat:'hits'               },
-    { label:'出塁率', value: bat.obp,  sub: 'OBP',           type:'batting',  cat:'onBasePercentage'   },
-    { label:'長打率', value: bat.slg,  sub: 'SLG',           type:'batting',  cat:'sluggingPercentage' },
-    { label:'OPS',    value: bat.ops,  sub: '出塁+長打',     type:'batting',  cat:'onBasePlusSlugging' },
-    { label:'得点',   value: bat.r,    sub: 'Runs',          type:'batting',  cat:'runs'               },
-  ];
-  const PIT_STATS = [
-    { label:'防御率',  value: pit.era,  sub: 'ERA',           type:'pitching', cat:'earnedRunAverage'              },
-    { label:'勝利',    value: pit.w,    sub: `${pit.l}敗`,    type:'pitching', cat:'wins'                         },
-    { label:'投球回',  value: pit.ip,   sub: 'IP',            type:'pitching', cat:'inningsPitched'               },
-    { label:'奪三振',  value: pit.so,   sub: 'SO',            type:'pitching', cat:'strikeouts'                   },
-    { label:'WHIP',    value: pit.whip, sub: '1投球回あたり', type:'pitching', cat:'walksAndHitsPerInningPitched' },
-  ];
 
   // まず空のランキングで即時描画
-  renderCards('battingCards',  BAT_STATS);
-  renderCards('pitchingCards', PIT_STATS);
-
+  buildAndRenderCards(bat, pit);
   // ランキング取得後に再描画
-  fetchNLRankings(year).then(rankings => {
-    renderCards('battingCards',  BAT_STATS, rankings);
-    renderCards('pitchingCards', PIT_STATS, rankings);
-  });
+  fetchNLRankings(year).then(rankings => buildAndRenderCards(bat, pit, rankings));
 
   renderTable(currentTableMode, career);
   renderAwards();
@@ -1415,6 +1393,62 @@ function renderCards(id, stats, rankings = {}) {
       ${leaderHtml}
     </div>`;
   }).join('');
+}
+
+/** カード描画用スタッツ配列を組み立てて renderCards を呼ぶ */
+function buildAndRenderCards(bat, pit, rankings = {}) {
+  const BAT_STATS = [
+    { label:'打率',   value: bat.avg,  sub: `${bat.g}試合`,  type:'batting',  cat:'battingAverage'     },
+    { label:'本塁打', value: bat.hr,   sub: 'HR',            type:'batting',  cat:'homeRuns'           },
+    { label:'打点',   value: bat.rbi,  sub: 'RBI',           type:'batting',  cat:'runsBattedIn'       },
+    { label:'安打',   value: bat.h,    sub: `${bat.ab}打数`, type:'batting',  cat:'hits'               },
+    { label:'出塁率', value: bat.obp,  sub: 'OBP',           type:'batting',  cat:'onBasePercentage'   },
+    { label:'長打率', value: bat.slg,  sub: 'SLG',           type:'batting',  cat:'sluggingPercentage' },
+    { label:'OPS',    value: bat.ops,  sub: '出塁+長打',     type:'batting',  cat:'onBasePlusSlugging' },
+    { label:'得点',   value: bat.r,    sub: 'Runs',          type:'batting',  cat:'runs'               },
+  ];
+  const PIT_STATS = [
+    { label:'防御率', value: pit.era,  sub: 'ERA',           type:'pitching', cat:'earnedRunAverage'              },
+    { label:'勝利',   value: pit.w,    sub: `${pit.l}敗`,    type:'pitching', cat:'wins'                         },
+    { label:'投球回', value: pit.ip,   sub: 'IP',            type:'pitching', cat:'inningsPitched'               },
+    { label:'奪三振', value: pit.so,   sub: 'SO',            type:'pitching', cat:'strikeouts'                   },
+    { label:'WHIP',   value: pit.whip, sub: '1投球回あたり', type:'pitching', cat:'walksAndHitsPerInningPitched' },
+  ];
+  renderCards('battingCards',  BAT_STATS, rankings);
+  renderCards('pitchingCards', PIT_STATS, rankings);
+}
+
+/** 大谷の最新成績 + NLランキングを同時取得してカードを更新
+ *  試合中でも 15 分ごとに自動呼び出し */
+async function refreshStatsCards() {
+  try {
+    const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
+    const [cs, rankings] = await Promise.all([
+      fetchCurrentSeasonLive(),
+      fetchNLRankings(yr),
+    ]);
+    if (!cs || !lastData) return;
+
+    // lastData にも反映（他の関数が参照しても最新になるよう）
+    lastData.currentSeason.batting  = cs.batting;
+    lastData.currentSeason.pitching = cs.pitching;
+
+    // バナーも更新
+    document.getElementById('bannerAvg').textContent  = cs.batting.avg;
+    document.getElementById('bannerHR').textContent   = cs.batting.hr;
+    document.getElementById('bannerRBI').textContent  = cs.batting.rbi;
+    document.getElementById('bannerOPS').textContent  = cs.batting.ops;
+    document.getElementById('bannerERA').textContent  = cs.pitching.era;
+    document.getElementById('bannerWL').textContent   = `${cs.pitching.w}-${cs.pitching.l}`;
+    document.getElementById('bannerSO').textContent   = cs.pitching.so;
+    document.getElementById('bannerWHIP').textContent = cs.pitching.whip;
+    document.getElementById('bannerGames').textContent  = cs.batting.g;
+    document.getElementById('bannerPitchG').textContent = cs.pitching.g;
+
+    buildAndRenderCards(cs.batting, cs.pitching, rankings);
+  } catch(e) {
+    console.warn('refreshStatsCards error:', e);
+  }
 }
 
 /* ══════════════════════════════════════
@@ -1938,7 +1972,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   checkPageUpdate();
   setInterval(checkPageUpdate, 5 * 60 * 1000);
 
-  // 1 時間ごとに自動更新
+  // 15分ごと: 打撃・投球成績カード + NLランキングを軽量更新
+  setInterval(refreshStatsCards, 15 * 60 * 1000);
+
+  // 1 時間ごとに全データ一括更新
   setInterval(async () => {
     try { await loadData(); } catch (e) { console.warn('Auto-refresh error:', e); }
     const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
