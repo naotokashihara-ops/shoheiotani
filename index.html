@@ -507,20 +507,6 @@
   <!-- NL West Standings -->
   <p class="section-title">🏆 NL 西地区 順位表</p>
   <div class="standings-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div class="panel-title" style="margin:0"><div class="dot blue"></div>National League West</div>
-      <span style="font-size:.7rem;color:var(--muted)" id="standingsUpdated"></span>
-    </div>
-    <div style="overflow-x:auto">
-      <table class="standings-table">
-        <thead><tr>
-          <th>#</th><th>チーム</th><th>勝</th><th>負</th><th>勝率</th><th>GB</th><th>連続</th>
-        </tr></thead>
-        <tbody id="standingsBody">
-          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:18px">読み込み中…</td></tr>
-        </tbody>
-      </table>
-    </div>
     <!-- 直前の試合結果 -->
     <div class="last-game-box">
       <div class="game-section-label">📊 直前の試合結果</div>
@@ -534,6 +520,21 @@
       <div class="next-game-main" id="nextGameBox">
         <span style="font-size:.78rem;color:var(--muted)">読み込み中…</span>
       </div>
+    </div>
+    <!-- Standings Table -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;margin-top:16px">
+      <div class="panel-title" style="margin:0"><div class="dot blue"></div>National League West</div>
+      <span style="font-size:.7rem;color:var(--muted)" id="standingsUpdated"></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="standings-table">
+        <thead><tr>
+          <th>#</th><th>チーム</th><th>勝</th><th>負</th><th>勝率</th><th>GB</th><th>連続</th>
+        </tr></thead>
+        <tbody id="standingsBody">
+          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:18px">読み込み中…</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
