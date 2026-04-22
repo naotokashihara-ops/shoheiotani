@@ -1525,7 +1525,7 @@ function renderTable(mode, career) {
       <th>試合</th><th>打率</th><th>打数</th><th>安打</th>
       <th>本塁打</th><th>打点</th><th>得点</th>
       <th>出塁率</th><th>長打率</th><th>OPS</th><th>三振</th><th>盗塁</th>
-    </tr></thead><tbody>${career.batting.slice().reverse().map(r => `
+    </tr></thead><tbody>${career.batting.slice().reverse().filter(r => +r.year >= 2021).map(r => `
       <tr class="${r.current?'current-season':''}">
         <td>${+r.year}${r.current?' ★':''}</td>
         <td>${esc(r.team)}</td>
@@ -1545,7 +1545,7 @@ function renderTable(mode, career) {
       <th>登板</th><th>先発</th><th>勝</th><th>敗</th>
       <th>防御率</th><th>投球回</th><th>奪三振</th>
       <th>与四球</th><th>被安打</th><th>WHIP</th>
-    </tr></thead><tbody>${career.pitching.slice().reverse().map(r => `
+    </tr></thead><tbody>${career.pitching.slice().reverse().filter(r => +r.year >= 2021).map(r => `
       <tr class="${r.current?'current-season':''}">
         <td>${+r.year}${r.current?' ★':''}</td>
         <td>${esc(r.team)}</td>
