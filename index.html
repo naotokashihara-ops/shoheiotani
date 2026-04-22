@@ -260,6 +260,34 @@
     .win-streak  { color: var(--green); font-weight: 700; }
     .lose-streak { color: var(--red);   font-weight: 700; }
 
+    /* ── At-Bats Table ── */
+    .ab-game-header {
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      margin-bottom:12px;
+    }
+    .ab-game-date { font-size:.75rem; color:var(--muted); }
+    .ab-game-opp  { font-size:.85rem; font-weight:700; }
+    .ab-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    .ab-table th {
+      text-align:left; padding:5px 8px;
+      font-size:.65rem; text-transform:uppercase;
+      letter-spacing:.07em; color:var(--muted);
+      border-bottom:1px solid var(--border);
+    }
+    .ab-table td { padding:7px 8px; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:middle; }
+    .ab-table tr:last-child td { border-bottom:none; }
+    .ab-pa-num { color:var(--muted); font-size:.72rem; white-space:nowrap; }
+    .ab-inning  { color:var(--muted); font-size:.72rem; white-space:nowrap; }
+    .ab-result  { font-weight:700; white-space:nowrap; }
+    .ab-result.hit    { color:#4ade80; }
+    .ab-result.hr     { color:#f1c40f; }
+    .ab-result.walk   { color:#60a5fa; }
+    .ab-result.out    { color:var(--muted); }
+    .ab-result.so     { color:#fb923c; }
+    .ab-rbi   { font-size:.72rem; color:#f1c40f; white-space:nowrap; }
+    .ab-count { font-size:.68rem; color:var(--muted); white-space:nowrap; font-family:monospace; }
+    .ab-no-game { text-align:center; color:var(--muted); font-size:.8rem; padding:14px 0; }
+
     /* ── Last Game & Next Game ── */
     .last-game-box {
       margin-top: 16px; border-top: 1px solid var(--border);
@@ -501,6 +529,14 @@
         <div class="sb-val" id="bannerWHIP">—</div>
         <div class="sb-sub">WHIP</div>
       </div>
+    </div>
+  </div>
+
+  <!-- 最新試合 打席結果 -->
+  <p class="section-title">🦇 最新試合の打席結果</p>
+  <div class="panel" id="atBatsPanel">
+    <div id="atBatsContent">
+      <span style="font-size:.78rem;color:var(--muted)">読み込み中…</span>
     </div>
   </div>
 
@@ -1074,6 +1110,141 @@ function renderLastGame(game) {
         <div>vs ${oppName}<span class="result-badge ${isWin?'result-win':'result-loss'}">${isWin?'勝':'負'}</span></div>
         <div style="color:var(--muted);font-size:.72rem">${esc(dateStr)}　${ha}</div>
       </div>
+    </div>`;
+}
+
+/* 打席結果イベント → 日本語マッピング */
+const AB_EVENT_JA = {
+  'Single':                    ['単打',       'hit'],
+  'Double':                    ['二塁打',     'hit'],
+  'Triple':                    ['三塁打',     'hit'],
+  'Home Run':                  ['本塁打 🔥',  'hr'],
+  'Strikeout':                 ['三振',       'so'],
+  'Strikeout Double Play':     ['三振DP',     'so'],
+  'Walk':                      ['四球',       'walk'],
+  'Intent Walk':               ['敬遠',       'walk'],
+  'Hit By Pitch':              ['死球',       'walk'],
+  'Grounded Into Double Play': ['併殺打',     'out'],
+  'Double Play':               ['併殺打',     'out'],
+  'Triple Play':               ['三重殺',     'out'],
+  'Field Error':               ['失策出塁',   'walk'],
+  'Fielders Choice':           ['野手選択',   'out'],
+  'Fielders Choice Out':       ['野手選択',   'out'],
+  'Fly Out':                   ['フライアウト','out'],
+  'Pop Out':                   ['内野フライ', 'out'],
+  'Ground Out':                ['ゴロアウト', 'out'],
+  'Line Out':                  ['ライナー',   'out'],
+  'Forceout':                  ['フォースアウト','out'],
+  'Sacrifice Fly':             ['犠牲フライ', 'out'],
+  'Sacrifice Bunt':            ['犠打',       'out'],
+  'Sac Fly':                   ['犠牲フライ', 'out'],
+  'Sac Bunt':                  ['犠打',       'out'],
+  'Sac Fly Double Play':       ['犠飛DP',     'out'],
+  'Fan interference':          ['観客妨害',   'walk'],
+  'Catcher Interference':      ['捕手妨害',   'walk'],
+  'Runner Out':                ['走塁アウト', 'out'],
+};
+const AB_EVENTS_SET = new Set(Object.keys(AB_EVENT_JA));
+
+async function fetchOhtaniAtBats(gamePk) {
+  if (!gamePk) return null;
+  try {
+    const res  = await fetchWithTimeout(
+      `${MLB_BASE}/game/${gamePk}/playByPlay`, 8000
+    );
+    const data = await res.json();
+    const plays = data.allPlays ?? [];
+
+    let paNum = 0;
+    const result = [];
+    for (const p of plays) {
+      if (p.matchup?.batter?.id !== MLB_ID) continue;
+      if (!AB_EVENTS_SET.has(p.result?.event)) continue;
+      paNum++;
+      result.push({
+        pa:      paNum,
+        inning:  p.about?.inning ?? '?',
+        half:    p.about?.halfInning ?? 'top',  // "top"=表 "bottom"=裏
+        event:   p.result?.event ?? '',
+        rbi:     p.result?.rbi ?? 0,
+        balls:   p.count?.balls   ?? 0,
+        strikes: p.count?.strikes ?? 0,
+      });
+    }
+    return result;
+  } catch(e) {
+    console.warn('fetchOhtaniAtBats failed:', e.message);
+    return null;
+  }
+}
+
+function renderOhtaniAtBats(game, atBats) {
+  const box = document.getElementById('atBatsContent');
+  if (!box) return;
+
+  if (!game || !atBats || atBats.length === 0) {
+    box.innerHTML = `<p class="ab-no-game">直近の試合データがありません</p>`;
+    return;
+  }
+
+  // ゲームヘッダー情報
+  const isHome   = game.teams?.home?.team?.id === DODGERS_ID;
+  const dodSide  = isHome ? game.teams.home : game.teams.away;
+  const oppSide  = isHome ? game.teams.away : game.teams.home;
+  const dodScore = dodSide?.score ?? '?';
+  const oppScore = oppSide?.score ?? '?';
+  const isWin    = Number(dodScore) > Number(oppScore);
+  const oppName  = esc(MLB_TEAM_JA[oppSide?.team?.name]
+               ?? MLB_TEAM_JA[oppSide?.team?.teamName]
+               ?? oppSide?.team?.name ?? '—');
+  const ha = isHome ? 'ホーム' : 'ビジター';
+
+  const gameUtc = game.gameDate ? new Date(game.gameDate) : null;
+  let dateStr = '';
+  if (gameUtc) {
+    dateStr = gameUtc.toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      month: 'numeric', day: 'numeric', weekday: 'short',
+    });
+  }
+
+  // 打席ごとの行
+  const rows = atBats.map(ab => {
+    const [jaName, cls] = AB_EVENT_JA[ab.event] ?? [esc(ab.event), 'out'];
+    const halfStr = ab.half === 'bottom' ? '裏' : '表';
+    const rbiStr  = ab.rbi > 0
+      ? `<span class="ab-rbi">${ab.rbi}打点</span>` : '';
+    return `
+      <tr>
+        <td class="ab-pa-num">${ab.pa}打席</td>
+        <td class="ab-inning">${ab.inning}回${halfStr}</td>
+        <td class="ab-result ${cls}">${jaName}</td>
+        <td>${rbiStr}</td>
+        <td class="ab-count">${ab.balls}-${ab.strikes}</td>
+      </tr>`;
+  }).join('');
+
+  // 打席サマリー
+  const hits = atBats.filter(a => ['Single','Double','Triple','Home Run'].includes(a.event)).length;
+  const hrs  = atBats.filter(a => a.event === 'Home Run').length;
+  const rbi  = atBats.reduce((s,a) => s + a.rbi, 0);
+  const totalRBI = rbi > 0 ? `　${rbi}打点` : '';
+  const hrStr    = hrs  > 0 ? `　${hrs}HR` : '';
+
+  box.innerHTML = `
+    <div class="ab-game-header">
+      <span class="ab-game-opp">vs ${oppName}</span>
+      <span class="result-badge ${isWin?'result-win':'result-loss'}">${isWin?'勝':'負'}</span>
+      <span class="ab-game-date">${esc(dateStr)}　${ha}　${+dodScore||0}-${+oppScore||0}</span>
+      <span class="ab-game-date" style="margin-left:auto">${atBats.length}打席　${hits}安打${hrStr}${totalRBI}</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="ab-table">
+        <thead><tr>
+          <th>打席</th><th>イニング</th><th>結果</th><th>打点</th><th>球数</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
     </div>`;
 }
 
@@ -1707,7 +1878,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
   renderTrendCharts(year);
   fetchStandings(year).then(renderStandings);
-  fetchLastGame().then(renderLastGame);
+  fetchLastGame().then(game => {
+    renderLastGame(game);
+    if (game?.gamePk) {
+      fetchOhtaniAtBats(game.gamePk).then(abs => renderOhtaniAtBats(game, abs));
+    } else {
+      renderOhtaniAtBats(null, null);
+    }
+  });
   fetchNextGame().then(renderNextGame);
 
   // 日本人選手: ① data.json から即時表示 → ② MLB API で最新に上書き
@@ -1726,7 +1904,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
     renderTrendCharts(yr);
     fetchStandings(yr).then(renderStandings);
-    fetchLastGame().then(renderLastGame);
+    fetchLastGame().then(game => {
+      renderLastGame(game);
+      if (game?.gamePk) {
+        fetchOhtaniAtBats(game.gamePk).then(abs => renderOhtaniAtBats(game, abs));
+      }
+    });
     fetchNextGame().then(renderNextGame);
     fetchAllJPStats(yr).then(renderJPStats);
   }, 60 * 60 * 1000);
