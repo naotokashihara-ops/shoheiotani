@@ -260,32 +260,27 @@
     .win-streak  { color: var(--green); font-weight: 700; }
     .lose-streak { color: var(--red);   font-weight: 700; }
 
-    /* ── At-Bats Table ── */
+    /* ── At-Bats Badges ── */
     .ab-game-header {
       display:flex; align-items:center; gap:10px; flex-wrap:wrap;
       margin-bottom:12px;
     }
     .ab-game-date { font-size:.75rem; color:var(--muted); }
     .ab-game-opp  { font-size:.85rem; font-weight:700; }
-    .ab-table { width:100%; border-collapse:collapse; font-size:.82rem; }
-    .ab-table th {
-      text-align:left; padding:5px 8px;
-      font-size:.65rem; text-transform:uppercase;
-      letter-spacing:.07em; color:var(--muted);
-      border-bottom:1px solid var(--border);
+    .ab-badges-row {
+      display:flex; flex-wrap:wrap; gap:8px;
     }
-    .ab-table td { padding:7px 8px; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:middle; }
-    .ab-table tr:last-child td { border-bottom:none; }
-    .ab-pa-num { color:var(--muted); font-size:.72rem; white-space:nowrap; }
-    .ab-inning  { color:var(--muted); font-size:.72rem; white-space:nowrap; }
-    .ab-result  { font-weight:700; white-space:nowrap; }
-    .ab-result.hit    { color:#4ade80; }
-    .ab-result.hr     { color:#f1c40f; }
-    .ab-result.walk   { color:#60a5fa; }
-    .ab-result.out    { color:var(--muted); }
-    .ab-result.so     { color:#fb923c; }
-    .ab-rbi   { font-size:.72rem; color:#f1c40f; white-space:nowrap; }
-    .ab-count { font-size:.68rem; color:var(--muted); white-space:nowrap; font-family:monospace; }
+    .ab-badge {
+      display:inline-flex; align-items:baseline; gap:2px;
+      padding:5px 12px; border-radius:20px;
+      font-size:.82rem; font-weight:700; white-space:nowrap;
+      background:rgba(255,255,255,.06);
+    }
+    .ab-result.hit  { color:#4ade80; }
+    .ab-result.hr   { color:#f1c40f; }
+    .ab-result.walk { color:#60a5fa; }
+    .ab-result.so   { color:#fb923c; }
+    .ab-result.out  { color:var(--muted); }
     .ab-no-game { text-align:center; color:var(--muted); font-size:.8rem; padding:14px 0; }
 
     /* ── Last Game & Next Game ── */
@@ -1113,38 +1108,63 @@ function renderLastGame(game) {
     </div>`;
 }
 
-/* 打席結果イベント → 日本語マッピング */
+/* 打席結果イベント → 日本語マッピング
+   MLB API はスペースなし形式("Groundout")と
+   スペースあり形式("Ground Out")を混在させるため両方登録 */
 const AB_EVENT_JA = {
-  'Single':                    ['単打',       'hit'],
-  'Double':                    ['二塁打',     'hit'],
-  'Triple':                    ['三塁打',     'hit'],
-  'Home Run':                  ['本塁打 🔥',  'hr'],
-  'Strikeout':                 ['三振',       'so'],
-  'Strikeout Double Play':     ['三振DP',     'so'],
-  'Walk':                      ['四球',       'walk'],
-  'Intent Walk':               ['敬遠',       'walk'],
-  'Hit By Pitch':              ['死球',       'walk'],
-  'Grounded Into Double Play': ['併殺打',     'out'],
-  'Double Play':               ['併殺打',     'out'],
-  'Triple Play':               ['三重殺',     'out'],
-  'Field Error':               ['失策出塁',   'walk'],
-  'Fielders Choice':           ['野手選択',   'out'],
-  'Fielders Choice Out':       ['野手選択',   'out'],
-  'Fly Out':                   ['フライアウト','out'],
-  'Pop Out':                   ['内野フライ', 'out'],
-  'Ground Out':                ['ゴロアウト', 'out'],
-  'Line Out':                  ['ライナー',   'out'],
-  'Forceout':                  ['フォースアウト','out'],
-  'Sacrifice Fly':             ['犠牲フライ', 'out'],
-  'Sacrifice Bunt':            ['犠打',       'out'],
-  'Sac Fly':                   ['犠牲フライ', 'out'],
-  'Sac Bunt':                  ['犠打',       'out'],
-  'Sac Fly Double Play':       ['犠飛DP',     'out'],
-  'Fan interference':          ['観客妨害',   'walk'],
-  'Catcher Interference':      ['捕手妨害',   'walk'],
-  'Runner Out':                ['走塁アウト', 'out'],
+  // 安打
+  'Single':                    ['ヒット',      'hit'],
+  'Double':                    ['二塁打',      'hit'],
+  'Triple':                    ['三塁打',      'hit'],
+  'Home Run':                  ['本塁打 🔥',   'hr'],
+  // 三振
+  'Strikeout':                 ['三振',        'so'],
+  'Strikeout Double Play':     ['三振DP',      'so'],
+  // 四死球
+  'Walk':                      ['四球',        'walk'],
+  'Intent Walk':               ['敬遠',        'walk'],
+  'Hit By Pitch':              ['死球',        'walk'],
+  // アウト各種（スペースあり）
+  'Grounded Into Double Play': ['併殺打',      'out'],
+  'Double Play':               ['併殺打',      'out'],
+  'Triple Play':               ['三重殺',      'out'],
+  'Fielders Choice':           ['野手選択',    'out'],
+  'Fielders Choice Out':       ['野手選択',    'out'],
+  'Fly Out':                   ['フライ',      'out'],
+  'Pop Out':                   ['内野フライ',  'out'],
+  'Ground Out':                ['ゴロ',        'out'],
+  'Line Out':                  ['ライナー',    'out'],
+  'Forceout':                  ['フォース',    'out'],
+  'Sacrifice Fly':             ['犠牲フライ',  'out'],
+  'Sacrifice Bunt':            ['犠打',        'out'],
+  'Sac Fly':                   ['犠牲フライ',  'out'],
+  'Sac Bunt':                  ['犠打',        'out'],
+  'Sac Fly Double Play':       ['犠飛DP',      'out'],
+  'Runner Out':                ['走塁アウト',  'out'],
+  // スペースなし形式（API の揺れ対策）
+  'Groundout':                 ['ゴロ',        'out'],
+  'Flyout':                    ['フライ',      'out'],
+  'Lineout':                   ['ライナー',    'out'],
+  'Popout':                    ['内野フライ',  'out'],
+  'Bunt Groundout':            ['バントゴロ',  'out'],
+  'Bunt Pop Out':              ['バントフライ', 'out'],
+  // その他
+  'Field Error':               ['失策出塁',    'walk'],
+  'Fan interference':          ['観客妨害',    'walk'],
+  'Catcher Interference':      ['捕手妨害',    'walk'],
 };
-const AB_EVENTS_SET = new Set(Object.keys(AB_EVENT_JA));
+
+/* 除外する baserunning / action イベント */
+const AB_EXCLUDE = new Set([
+  'Stolen Base 2B','Stolen Base 3B','Stolen Base Home',
+  'Caught Stealing 2B','Caught Stealing 3B','Caught Stealing Home',
+  'Pickoff 1B','Pickoff 2B','Pickoff 3B',
+  'Pickoff Error 1B','Pickoff Error 2B','Pickoff Error 3B',
+  'Wild Pitch','Passed Ball','Balk',
+  'Game Advisory','Runner Placed On Base','Defensive Switch',
+  'Pitching Substitution','Offensive Substitution','Defensive Indiff',
+  'Other Advance','Error',
+]);
 
 async function fetchOhtaniAtBats(gamePk) {
   if (!gamePk) return null;
@@ -1159,16 +1179,15 @@ async function fetchOhtaniAtBats(gamePk) {
     const result = [];
     for (const p of plays) {
       if (p.matchup?.batter?.id !== MLB_ID) continue;
-      if (!AB_EVENTS_SET.has(p.result?.event)) continue;
+      const evt = p.result?.event ?? '';
+      if (!evt || AB_EXCLUDE.has(evt)) continue;
+      // result.type === 'atBat' が確実な打席; それ以外は既知イベントのみ
+      if (p.result?.type !== 'atBat' && !AB_EVENT_JA[evt]) continue;
       paNum++;
       result.push({
-        pa:      paNum,
-        inning:  p.about?.inning ?? '?',
-        half:    p.about?.halfInning ?? 'top',  // "top"=表 "bottom"=裏
-        event:   p.result?.event ?? '',
-        rbi:     p.result?.rbi ?? 0,
-        balls:   p.count?.balls   ?? 0,
-        strikes: p.count?.strikes ?? 0,
+        pa:    paNum,
+        event: evt,
+        rbi:   p.result?.rbi ?? 0,
       });
     }
     return result;
@@ -1208,44 +1227,28 @@ function renderOhtaniAtBats(game, atBats) {
     });
   }
 
-  // 打席ごとの行
-  const rows = atBats.map(ab => {
-    const [jaName, cls] = AB_EVENT_JA[ab.event] ?? [esc(ab.event), 'out'];
-    const halfStr = ab.half === 'bottom' ? '裏' : '表';
-    const rbiStr  = ab.rbi > 0
-      ? `<span class="ab-rbi">${ab.rbi}打点</span>` : '';
-    return `
-      <tr>
-        <td class="ab-pa-num">${ab.pa}打席</td>
-        <td class="ab-inning">${ab.inning}回${halfStr}</td>
-        <td class="ab-result ${cls}">${jaName}</td>
-        <td>${rbiStr}</td>
-        <td class="ab-count">${ab.balls}-${ab.strikes}</td>
-      </tr>`;
-  }).join('');
-
   // 打席サマリー
   const hits = atBats.filter(a => ['Single','Double','Triple','Home Run'].includes(a.event)).length;
   const hrs  = atBats.filter(a => a.event === 'Home Run').length;
   const rbi  = atBats.reduce((s,a) => s + a.rbi, 0);
-  const totalRBI = rbi > 0 ? `　${rbi}打点` : '';
-  const hrStr    = hrs  > 0 ? `　${hrs}HR` : '';
+  const hrStr  = hrs > 0 ? `　${hrs}HR` : '';
+  const rbiStr = rbi > 0 ? `　${rbi}打点` : '';
+
+  // 打席バッジ（シンプル表示）
+  const badges = atBats.map(ab => {
+    const [jaName, cls] = AB_EVENT_JA[ab.event] ?? [esc(ab.event), 'out'];
+    const rbiMark = ab.rbi > 0 ? `<sup style="color:#f1c40f;font-size:.65em"> ${ab.rbi}点</sup>` : '';
+    return `<span class="ab-badge ab-result ${cls}">${ab.pa}：${jaName}${rbiMark}</span>`;
+  }).join('');
 
   box.innerHTML = `
     <div class="ab-game-header">
       <span class="ab-game-opp">vs ${oppName}</span>
       <span class="result-badge ${isWin?'result-win':'result-loss'}">${isWin?'勝':'負'}</span>
       <span class="ab-game-date">${esc(dateStr)}　${ha}　${+dodScore||0}-${+oppScore||0}</span>
-      <span class="ab-game-date" style="margin-left:auto">${atBats.length}打席　${hits}安打${hrStr}${totalRBI}</span>
+      <span class="ab-game-date" style="margin-left:auto">${atBats.length}打数　${hits}安打${hrStr}${rbiStr}</span>
     </div>
-    <div style="overflow-x:auto">
-      <table class="ab-table">
-        <thead><tr>
-          <th>打席</th><th>イニング</th><th>結果</th><th>打点</th><th>球数</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+    <div class="ab-badges-row">${badges}</div>`;
 }
 
 async function fetchNextGame() {
