@@ -11,7 +11,7 @@
     default-src 'none';
     script-src  'self' 'unsafe-inline' https://cdn.jsdelivr.net;
     style-src   'self' 'unsafe-inline';
-    connect-src https://statsapi.mlb.com https://naotokashihara-ops.github.io;
+    connect-src 'self' https://statsapi.mlb.com https://naotokashihara-ops.github.io;
     img-src     'self' data: https:;
     font-src    'self';
     frame-ancestors 'none';
@@ -958,15 +958,16 @@ const TEAM_SHORT  = {
   'Rockies':   'COロッキーズ',
 };
 
-/* 全6地区の順位データを一括取得（AL+NL）*/
+/* 全6地区の順位データを取得（NL・AL を並列2回呼び出し）*/
 async function fetchStandings(year) {
   try {
-    const res  = await fetchWithTimeout(
-      `${MLB_BASE}/standings?leagueId=103,104&season=${year}&standingsTypes=regularSeason`, 6000
-    );
-    const data = await res.json();
+    const [nlRes, alRes] = await Promise.all([
+      fetchWithTimeout(`${MLB_BASE}/standings?leagueId=104&season=${year}&standingsTypes=regularSeason`, 6000),
+      fetchWithTimeout(`${MLB_BASE}/standings?leagueId=103&season=${year}&standingsTypes=regularSeason`, 6000),
+    ]);
+    const [nlData, alData] = await Promise.all([nlRes.json(), alRes.json()]);
     const all = {};
-    for (const rec of (data.records ?? [])) {
+    for (const rec of [...(nlData.records ?? []), ...(alData.records ?? [])]) {
       const divId = rec.division?.id;
       if (divId) all[divId] = rec.teamRecords ?? [];
     }
