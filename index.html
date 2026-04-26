@@ -1264,6 +1264,15 @@ function renderOhtaniAtBats(game, atBats) {
   }
 
   // 打席サマリー
+  // 打数にカウントしないイベント（四球・死球・犠打類・妨害出塁）
+  const NON_AB = new Set([
+    'Walk','Intent Walk','Hit By Pitch',
+    'Sacrifice Fly','Sac Fly','Sac Fly Double Play',
+    'Sacrifice Bunt','Sac Bunt',
+    'Catcher Interference','Fan interference',
+  ]);
+  const pa   = atBats.length;                                                   // 打席数
+  const abCount = atBats.filter(a => !NON_AB.has(a.event)).length;              // 打数
   const hits = atBats.filter(a => ['Single','Double','Triple','Home Run'].includes(a.event)).length;
   const hrs  = atBats.filter(a => a.event === 'Home Run').length;
   const rbi  = atBats.reduce((s,a) => s + a.rbi, 0);
@@ -1282,7 +1291,7 @@ function renderOhtaniAtBats(game, atBats) {
       <span class="ab-game-opp">vs ${oppName}</span>
       <span class="result-badge ${isWin?'result-win':'result-loss'}">${isWin?'勝':'負'}</span>
       <span class="ab-game-date">${esc(dateStr)}　${ha}　${+dodScore||0}-${+oppScore||0}</span>
-      <span class="ab-game-date" style="margin-left:auto">${atBats.length}打数　${hits}安打${hrStr}${rbiStr}</span>
+      <span class="ab-game-date" style="margin-left:auto">${pa}打席　${abCount}打数　${hits}安打${hrStr}${rbiStr}</span>
     </div>
     <div class="ab-badges-row">${badges}</div>`;
 }
