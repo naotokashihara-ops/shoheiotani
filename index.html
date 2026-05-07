@@ -637,6 +637,16 @@
     <div class="standings-card" style="text-align:center;color:var(--muted);padding:24px">読み込み中…</div>
   </div>
 
+  <!-- AL 成績ランキング -->
+  <p class="section-title" style="margin-top:36px">🏆 ア・リーグ 打撃成績 上位3名</p>
+  <div class="cards-grid" id="alBattingCards">
+    <div style="color:var(--muted);font-size:.8rem;padding:12px">読み込み中…</div>
+  </div>
+  <p class="section-title" style="margin-top:24px">🏆 ア・リーグ 投球成績 上位3名</p>
+  <div class="cards-grid" id="alPitchingCards" style="margin-bottom:40px">
+    <div style="color:var(--muted);font-size:.8rem;padding:12px">読み込み中…</div>
+  </div>
+
 </main>
 
 <script>
@@ -1410,6 +1420,90 @@ async function fetchNLRankings(year) {
 }
 
 /* ══════════════════════════════════════
+   AL RANKINGS
+══════════════════════════════════════ */
+async function fetchALRankings(year) {
+  const base = `${MLB_BASE}/stats/leaders?season=${year}&leagueId=103&sportId=1&limit=20`;
+  const batCats = 'battingAverage,homeRuns,runsBattedIn,onBasePlusSlugging,onBasePercentage,sluggingPercentage,stolenBases,runs,hits';
+  const pitCats = 'earnedRunAverage,wins,strikeouts,inningsPitched,walksAndHitsPerInningPitched';
+  try {
+    const [bData, pData] = await Promise.all([
+      fetchWithTimeout(`${base}&leaderCategories=${batCats}&statGroup=hitting`).then(r => r.json()),
+      fetchWithTimeout(`${base}&leaderCategories=${pitCats}&statGroup=pitching`).then(r => r.json()),
+    ]);
+    const rankings = {};
+    for (const group of [...(bData.leagueLeaders ?? []), ...(pData.leagueLeaders ?? [])]) {
+      const leaders = group.leaders ?? [];
+      // ランクグループ別に上位3グループを取得（タイ考慮）
+      const seen = new Set();
+      const top3 = [];
+      for (const l of leaders) {
+        if (!seen.has(l.rank)) {
+          seen.add(l.rank);
+          top3.push({ rank: l.rank, name: shortName(l.person?.fullName), value: l.value ?? '' });
+          if (top3.length >= 3) break;
+        }
+      }
+      rankings[group.leaderCategory] = top3;
+    }
+    return rankings;
+  } catch (e) {
+    console.warn('AL rankings fetch failed:', e.message);
+    return {};
+  }
+}
+
+const AL_BAT_CATS = [
+  { label:'打率',   cat:'battingAverage',     type:'batting'  },
+  { label:'本塁打', cat:'homeRuns',           type:'batting'  },
+  { label:'打点',   cat:'runsBattedIn',       type:'batting'  },
+  { label:'安打',   cat:'hits',               type:'batting'  },
+  { label:'出塁率', cat:'onBasePercentage',   type:'batting'  },
+  { label:'長打率', cat:'sluggingPercentage', type:'batting'  },
+  { label:'OPS',    cat:'onBasePlusSlugging', type:'batting'  },
+  { label:'得点',   cat:'runs',               type:'batting'  },
+];
+const AL_PIT_CATS = [
+  { label:'防御率', cat:'earnedRunAverage',              type:'pitching' },
+  { label:'勝利',   cat:'wins',                         type:'pitching' },
+  { label:'投球回', cat:'inningsPitched',               type:'pitching' },
+  { label:'奪三振', cat:'strikeouts',                   type:'pitching' },
+  { label:'WHIP',   cat:'walksAndHitsPerInningPitched', type:'pitching' },
+];
+
+function renderALRankCards(id, cats, rankings) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = cats.map(({ label, cat, type }) => {
+    const leaders = rankings[cat] ?? [];
+    const lines = leaders.map(l =>
+      `${l.rank}位: <strong>${esc(l.name)}</strong> ${esc(String(l.value))}`
+    );
+    const bodyHtml = lines.length
+      ? `<div class="card-leader">${lines.join('<br>')}</div>`
+      : `<div class="card-leader" style="color:var(--muted)">データなし</div>`;
+    return `
+    <div class="stat-card ${type}">
+      <div class="card-header">
+        <div class="card-label">${label}</div>
+      </div>
+      ${bodyHtml}
+    </div>`;
+  }).join('');
+}
+
+async function refreshALRankings() {
+  try {
+    const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
+    const rankings = await fetchALRankings(yr);
+    renderALRankCards('alBattingCards',  AL_BAT_CATS, rankings);
+    renderALRankCards('alPitchingCards', AL_PIT_CATS, rankings);
+  } catch (e) {
+    console.warn('refreshALRankings error:', e);
+  }
+}
+
+/* ══════════════════════════════════════
    CARDS
 ══════════════════════════════════════ */
 function renderCards(id, stats, rankings = {}) {
@@ -2032,6 +2126,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const year = lastData?.currentSeason?.year ?? new Date().getFullYear();
   renderTrendCharts(year);
   fetchStandings(year).then(all => { renderStandings(all); renderAllDivisions(all); });
+  refreshALRankings();
   fetchLastGame().then(game => {
     renderLastGame(game);
     if (game?.gamePk) {
@@ -2052,8 +2147,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   checkPageUpdate();
   setInterval(checkPageUpdate, 5 * 60 * 1000);
 
-  // 15分ごと: 打撃・投球成績カード + NLランキングを軽量更新
+  // 15分ごと: 打撃・投球成績カード + NL/ALランキングを軽量更新
   setInterval(refreshStatsCards, 15 * 60 * 1000);
+  setInterval(refreshALRankings, 15 * 60 * 1000);
 
   // 1 時間ごとに全データ一括更新
   setInterval(async () => {
@@ -2069,6 +2165,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
     fetchNextGame().then(renderNextGame);
     fetchAllJPStats(yr).then(renderJPStats);
+    refreshALRankings();
   }, 60 * 60 * 1000);
 
 });
