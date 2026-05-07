@@ -1389,28 +1389,15 @@ async function fetchNLRankings(year) {
       const cat     = group.leaderCategory;
       const leaders = group.leaders ?? [];
       const ohtani  = leaders.find(l => l.person?.id === 660271);
-      // 1位タイ全員 (rank===1)
-      const tiedAtTop = leaders
-        .filter(l => l.rank === 1)
-        .map(l => ({ name: shortName(l.person?.fullName), value: l.value ?? '', id: l.person?.id }));
-      // 2位・3位（タイがあると rank が飛ぶため、値で検索）
-      const nonFirst   = leaders.filter(l => l.rank !== 1);
-      const secondRank = nonFirst[0]?.rank ?? null;
-      const secondEntry = nonFirst[0] ?? null;
-      const afterSecond = nonFirst.filter(l => l.rank !== secondRank);
-      const thirdEntry  = afterSecond[0] ?? null;
-      if (tiedAtTop.length) {
-        rankings[cat] = {
-          rank:       ohtani?.rank ?? null,
-          tiedAtTop,
-          second: secondEntry
-            ? { name: shortName(secondEntry.person?.fullName), value: secondEntry.value ?? '', id: secondEntry.person?.id, rank: secondEntry.rank }
-            : null,
-          third: thirdEntry
-            ? { name: shortName(thirdEntry.person?.fullName), value: thirdEntry.value ?? '', id: thirdEntry.person?.id, rank: thirdEntry.rank }
-            : null,
-        };
-      }
+      // 大谷以外の上位3名（人数ベース、タイは同順位のまま）
+      const comparisons = leaders
+        .filter(l => l.person?.id !== 660271)
+        .slice(0, 3)
+        .map(l => ({ rank: l.rank, name: shortName(l.person?.fullName), value: l.value ?? '' }));
+      rankings[cat] = {
+        rank: ohtani?.rank ?? null,
+        comparisons,
+      };
     }
     return rankings;
   } catch (e) {
@@ -1512,45 +1499,12 @@ function renderCards(id, stats, rankings = {}) {
       : '';
 
     let leaderHtml = '';
-    if (rk) {
-      const ohtaniRank = rk.rank;
-      const tiedAtTop  = rk.tiedAtTop ?? [];
-      const lines      = [];
-
-      // ── 1位ライン ──
-      if (ohtaniRank === 1) {
-        // 大谷以外の1位タイがいれば表示
-        const others = tiedAtTop.filter(l => l.id !== MLB_ID);
-        if (others.length > 0) {
-          const val   = esc(String(others[0].value));
-          const names = others.map(l => `<strong>${esc(l.name)}</strong>`).join('・');
-          lines.push(`1位タイ: ${names} ${val}`);
-        }
-      } else {
-        // 大谷が1位でない → 1位全員表示
-        if (tiedAtTop.length === 1) {
-          lines.push(`1位: <strong>${esc(tiedAtTop[0].name)}</strong> ${esc(String(tiedAtTop[0].value))}`);
-        } else if (tiedAtTop.length > 1) {
-          const val   = esc(String(tiedAtTop[0].value));
-          const names = tiedAtTop.map(l => `<strong>${esc(l.name)}</strong>`).join('・');
-          lines.push(`1位タイ: ${names} ${val}`);
-        }
-      }
-
-      // ── 2位ライン（大谷が同順位なら省略）──
-      if (rk.second && rk.second.id !== MLB_ID && ohtaniRank !== rk.second.rank) {
-        lines.push(`${rk.second.rank}位: <strong>${esc(rk.second.name)}</strong> ${esc(String(rk.second.value))}`);
-      }
-
-      // ── 3位ライン（大谷が同順位なら省略）──
-      if (rk.third && rk.third.id !== MLB_ID && ohtaniRank !== rk.third.rank) {
-        lines.push(`${rk.third.rank}位: <strong>${esc(rk.third.name)}</strong> ${esc(String(rk.third.value))}`);
-      }
-
-      if (lines.length) {
-        const multiClass = lines.join('').length > 60 ? ' card-leader-sm' : '';
-        leaderHtml = `<div class="card-leader${multiClass}">${lines.join('<br>')}</div>`;
-      }
+    if (rk?.comparisons?.length) {
+      const lines = rk.comparisons.map(c =>
+        `${c.rank}位: <strong>${esc(c.name)}</strong> ${esc(String(c.value))}`
+      );
+      const multiClass = lines.join('').length > 60 ? ' card-leader-sm' : '';
+      leaderHtml = `<div class="card-leader${multiClass}">${lines.join('<br>')}</div>`;
     }
 
     return `
