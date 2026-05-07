@@ -1454,8 +1454,8 @@ function renderCards(id, stats, rankings = {}) {
         <div class="card-label">${s.label}</div>
         ${rankHtml}
       </div>
-      <div class="card-value ${s.type}">${s.value}</div>
-      <div class="card-sub">${s.sub}</div>
+      <div class="card-value ${s.type}">${esc(String(s.value ?? ''))}</div>
+      <div class="card-sub">${esc(String(s.sub ?? ''))}</div>
       ${leaderHtml}
     </div>`;
   }).join('');
