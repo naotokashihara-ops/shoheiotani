@@ -1942,19 +1942,21 @@ function destroyChart(key) {
    日本人メジャーリーガー 2026成績
 ══════════════════════════════════════ */
 const JP_BATTERS_LIST = [
-  { ja:'村上宗隆', search:'Munetaka Murakami' },
-  { ja:'岡本和真',  search:'Kazuma Okamoto'    },
-  { ja:'鈴木誠也',  search:'Seiya Suzuki'      },
-  { ja:'吉田正尚',  search:'Masataka Yoshida'  },
+  { ja:'大谷翔平',   id: 660271                   },
+  { ja:'村上宗隆',   search:'Munetaka Murakami'   },
+  { ja:'岡本和真',   search:'Kazuma Okamoto'      },
+  { ja:'鈴木誠也',   search:'Seiya Suzuki'        },
+  { ja:'吉田正尚',   search:'Masataka Yoshida'    },
 ];
 const JP_PITCHERS_LIST = [
-  { ja:'山本由伸',   search:'Yoshinobu Yamamoto' },
-  { ja:'佐々木朗希', search:'Roki Sasaki'         },
-  { ja:'今永昇太',   search:'Shota Imanaga'       },
-  { ja:'千賀滉大',   search:'Kodai Senga'         },
-  { ja:'菊池雄星',   search:'Yusei Kikuchi'       },
-  { ja:'菅野智之',   search:'Tomoyuki Sugano'     },
-  { ja:'今井達也',   search:'Tatsuya Imai'        },
+  { ja:'大谷翔平',   id: 660271                   },
+  { ja:'山本由伸',   search:'Yoshinobu Yamamoto'  },
+  { ja:'佐々木朗希', search:'Roki Sasaki'          },
+  { ja:'今永昇太',   search:'Shota Imanaga'        },
+  { ja:'千賀滉大',   search:'Kodai Senga'          },
+  { ja:'菊池雄星',   search:'Yusei Kikuchi'        },
+  { ja:'菅野智之',   search:'Tomoyuki Sugano'      },
+  { ja:'今井達也',   search:'Tatsuya Imai'         },
 ];
 
 async function resolveMLBId(searchName) {
@@ -1974,9 +1976,9 @@ async function fetchAllJPStats(year) {
   const storedPit = lastData?.jpPlayers?.pitching ?? [];
   const storedId = (list, ja) => list.find(p => p.ja === ja)?.id ?? null;
 
-  // IDが未取得の選手だけ検索APIを呼ぶ
+  // IDが未取得の選手だけ検索APIを呼ぶ（player.id が直指定されていればそのまま使う）
   const resolveWithCache = async (player, stored) => {
-    const id = storedId(stored, player.ja) ?? await resolveMLBId(player.search);
+    const id = player.id ?? storedId(stored, player.ja) ?? await resolveMLBId(player.search);
     return { ...player, id };
   };
 
@@ -2027,8 +2029,12 @@ function renderJPStats({ batStats, pitStats }) {
     ${batStats.map(p => {
       if (!p.stat) return noData(p.ja, 13);
       const s = p.stat;
-      return `<tr>
-        <td style="font-weight:700;color:var(--gold)">${esc(p.ja)}</td>
+      const isOhtani = p.id === 660271;
+      const nameTd = isOhtani
+        ? `<td style="font-weight:700;color:#58a6ff">⭐ ${esc(p.ja)}</td>`
+        : `<td style="font-weight:700;color:var(--gold)">${esc(p.ja)}</td>`;
+      return `<tr${isOhtani ? ' style="background:rgba(88,166,255,.06)"' : ''}>
+        ${nameTd}
         <td>${esc(p.team)}</td>
         <td>${+(s.gamesPlayed??0)}</td>
         <td class="hl">${esc(fmtAvg(s.avg))}</td>
@@ -2057,8 +2063,12 @@ function renderJPStats({ batStats, pitStats }) {
     ${pitStats.map(p => {
       if (!p.stat) return noData(p.ja, 11);
       const s = p.stat;
-      return `<tr>
-        <td style="font-weight:700;color:var(--gold)">${esc(p.ja)}</td>
+      const isOhtani = p.id === 660271;
+      const nameTd = isOhtani
+        ? `<td style="font-weight:700;color:#58a6ff">⭐ ${esc(p.ja)}</td>`
+        : `<td style="font-weight:700;color:var(--gold)">${esc(p.ja)}</td>`;
+      return `<tr${isOhtani ? ' style="background:rgba(88,166,255,.06)"' : ''}>
+        ${nameTd}
         <td>${esc(p.team)}</td>
         <td>${+(s.gamesPlayed??0)}</td>
         <td>${+(s.gamesStarted??0)}</td>
