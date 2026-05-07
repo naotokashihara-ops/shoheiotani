@@ -1383,18 +1383,21 @@ async function fetchNLRankings(year) {
       const tiedAtTop = leaders
         .filter(l => l.rank === 1)
         .map(l => ({ name: shortName(l.person?.fullName), value: l.value ?? '', id: l.person?.id }));
-      // 2位・3位
-      const secondEntry = leaders.find(l => l.rank === 2);
-      const thirdEntry  = leaders.find(l => l.rank === 3);
+      // 2位・3位（タイがあると rank が飛ぶため、値で検索）
+      const nonFirst   = leaders.filter(l => l.rank !== 1);
+      const secondRank = nonFirst[0]?.rank ?? null;
+      const secondEntry = nonFirst[0] ?? null;
+      const afterSecond = nonFirst.filter(l => l.rank !== secondRank);
+      const thirdEntry  = afterSecond[0] ?? null;
       if (tiedAtTop.length) {
         rankings[cat] = {
           rank:       ohtani?.rank ?? null,
           tiedAtTop,
           second: secondEntry
-            ? { name: shortName(secondEntry.person?.fullName), value: secondEntry.value ?? '', id: secondEntry.person?.id }
+            ? { name: shortName(secondEntry.person?.fullName), value: secondEntry.value ?? '', id: secondEntry.person?.id, rank: secondEntry.rank }
             : null,
           third: thirdEntry
-            ? { name: shortName(thirdEntry.person?.fullName), value: thirdEntry.value ?? '', id: thirdEntry.person?.id }
+            ? { name: shortName(thirdEntry.person?.fullName), value: thirdEntry.value ?? '', id: thirdEntry.person?.id, rank: thirdEntry.rank }
             : null,
         };
       }
@@ -1443,14 +1446,14 @@ function renderCards(id, stats, rankings = {}) {
         }
       }
 
-      // ── 2位ライン（大谷が2位なら省略）──
-      if (ohtaniRank !== 2 && rk.second && rk.second.id !== MLB_ID) {
-        lines.push(`2位: <strong>${esc(rk.second.name)}</strong> ${esc(String(rk.second.value))}`);
+      // ── 2位ライン（大谷が同順位なら省略）──
+      if (rk.second && rk.second.id !== MLB_ID && ohtaniRank !== rk.second.rank) {
+        lines.push(`${rk.second.rank}位: <strong>${esc(rk.second.name)}</strong> ${esc(String(rk.second.value))}`);
       }
 
-      // ── 3位ライン（大谷が3位なら省略）──
-      if (ohtaniRank !== 3 && rk.third && rk.third.id !== MLB_ID) {
-        lines.push(`3位: <strong>${esc(rk.third.name)}</strong> ${esc(String(rk.third.value))}`);
+      // ── 3位ライン（大谷が同順位なら省略）──
+      if (rk.third && rk.third.id !== MLB_ID && ohtaniRank !== rk.third.rank) {
+        lines.push(`${rk.third.rank}位: <strong>${esc(rk.third.name)}</strong> ${esc(String(rk.third.value))}`);
       }
 
       if (lines.length) {
