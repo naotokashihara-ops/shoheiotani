@@ -1435,15 +1435,12 @@ async function fetchALRankings(year) {
     for (const group of [...(bData.leagueLeaders ?? []), ...(pData.leagueLeaders ?? [])]) {
       const leaders = group.leaders ?? [];
       // ランクグループ別に上位3グループを取得（タイ考慮）
-      const seen = new Set();
-      const top3 = [];
-      for (const l of leaders) {
-        if (!seen.has(l.rank)) {
-          seen.add(l.rank);
-          top3.push({ rank: l.rank, name: shortName(l.person?.fullName), value: l.value ?? '' });
-          if (top3.length >= 3) break;
-        }
-      }
+      // 上位3名（タイは同順位のまま、人数で3名まで）
+      const top3 = leaders.slice(0, 3).map(l => ({
+        rank: l.rank,
+        name: shortName(l.person?.fullName),
+        value: l.value ?? '',
+      }));
       rankings[group.leaderCategory] = top3;
     }
     return rankings;
