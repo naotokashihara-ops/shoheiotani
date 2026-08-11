@@ -734,8 +734,6 @@ async function fetchMLB() {
   const bat = b.stats[0]?.splits[0]?.stat ?? {};
   const pit = p.stats[0]?.splits[0]?.stat ?? {};
 
-  const fmt = v => (typeof v === 'number' ? v.toFixed(3) : v) || '0';
-
   return {
     lastUpdated: new Date().toISOString(),
     currentSeason: {
@@ -749,7 +747,7 @@ async function fetchMLB() {
         obp: bat.obp ?? '.---', slg: bat.slg ?? '.---', ops: bat.ops ?? '.---',
       },
       pitching: {
-        era: bat.era ?? pit.era ?? '-.--',
+        era: pit.era ?? '-.--',
         g: pit.gamesPlayed ?? 0, gs: pit.gamesStarted ?? 0,
         w: pit.wins ?? 0, l: pit.losses ?? 0,
         ip: pit.inningsPitched ?? '0.0',
@@ -867,6 +865,8 @@ async function loadData(manual = false) {
       // ① CURRENT SEASON バナーを更新
       lastData.currentSeason.batting  = cs.batting;
       lastData.currentSeason.pitching = cs.pitching;
+      // ライブ取得に成功したので「最終更新」を現在時刻に更新
+      lastData.lastUpdated = new Date().toISOString();
 
       // ② 年度別成績の現在年（2026）行も最新値に更新
       const curYear = String(new Date().getFullYear());
@@ -1557,6 +1557,11 @@ async function refreshStatsCards() {
     // lastData にも反映（他の関数が参照しても最新になるよう）
     lastData.currentSeason.batting  = cs.batting;
     lastData.currentSeason.pitching = cs.pitching;
+    // 「最終更新」を現在時刻に更新
+    lastData.lastUpdated = new Date().toISOString();
+    const luEl = document.getElementById('lastUpdated');
+    if (luEl) luEl.textContent = '最終更新: ' +
+      new Date().toLocaleString('ja-JP', { timeZone:'Asia/Tokyo', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) + ' JST';
 
     // バナーも更新
     document.getElementById('bannerAvg').textContent  = cs.batting.avg;
