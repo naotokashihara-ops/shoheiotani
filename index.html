@@ -1180,7 +1180,8 @@ async function fetchLastGame() {
     const end  = fmt(now);
     const past = new Date(now); past.setDate(past.getDate() - 10);
     const start = fmt(past);
-    const url  = `${MLB_BASE}/schedule?teamId=${DODGERS_ID}&startDate=${start}&endDate=${end}&sportId=1&gameType=R&hydrate=team,linescore`;
+    // gameType=R(レギュラー)+F,D,L,W(ポストシーズン各ラウンド) → PS中は直近のプレーオフ試合を拾う
+    const url  = `${MLB_BASE}/schedule?teamId=${DODGERS_ID}&startDate=${start}&endDate=${end}&sportId=1&gameType=R,F,D,L,W&hydrate=team,linescore`;
     const res  = await fetchWithTimeout(url, 5000);
     const data = await res.json();
     let last = null;
@@ -1397,7 +1398,8 @@ async function fetchNextGame() {
     const start = fmt(now);
     const end30 = new Date(now); end30.setDate(end30.getDate() + 30);
     const end   = fmt(end30);
-    const url   = `${MLB_BASE}/schedule?teamId=${DODGERS_ID}&startDate=${start}&endDate=${end}&sportId=1&gameType=R&hydrate=team,venue`;
+    // gameType=R(レギュラー)+F,D,L,W(ポストシーズン各ラウンド) → PS中は次のプレーオフ試合を表示
+    const url   = `${MLB_BASE}/schedule?teamId=${DODGERS_ID}&startDate=${start}&endDate=${end}&sportId=1&gameType=R,F,D,L,W&hydrate=team,venue`;
     const res   = await fetchWithTimeout(url, 5000);
     const data  = await res.json();
     // Find first scheduled/preview game
