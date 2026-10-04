@@ -422,6 +422,71 @@
       .season-year { font-size: 1.8rem; }
       main { padding: 18px 12px 40px; }
     }
+
+    /* ══ POSTSEASON ══ */
+    #postseasonSection .section-title::after { background: linear-gradient(90deg, var(--gold), transparent); }
+    .stat-card.postseason::before { background: linear-gradient(90deg, #EFB21E, #f0c850); }
+    .card-value.postseason { color: var(--gold); }
+    /* シリーズ状況ヘッダー */
+    .ps-series-head {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;
+      margin-bottom: 4px;
+    }
+    .ps-round-name { font-size: 1.05rem; font-weight: 800; color: var(--text); }
+    .ps-round-tag {
+      font-size: .68rem; font-weight: 700; color: var(--gold);
+      border: 1px solid rgba(239,178,30,.5); border-radius: 5px; padding: 1px 7px;
+    }
+    .ps-series-score {
+      font-size: .9rem; font-weight: 800; color: var(--text); margin-left: auto;
+    }
+    .ps-series-status {
+      display: inline-block; font-size: .72rem; font-weight: 800;
+      border-radius: 5px; padding: 1px 8px; margin-left: 6px;
+    }
+    .ps-st-lead  { background: rgba(239,178,30,.18); color: var(--gold); }
+    .ps-st-win   { background: rgba(63,185,80,.2);  color: var(--green); }
+    .ps-st-out   { background: rgba(248,81,73,.2);  color: var(--red); }
+    .ps-st-even  { background: rgba(139,148,158,.18); color: var(--muted); }
+    /* 試合ごとの行 */
+    .ps-games { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .ps-game-row {
+      display: grid; grid-template-columns: 34px 1fr auto; align-items: center;
+      gap: 10px; padding: 8px 12px; border-radius: 8px;
+      background: var(--card2); border: 1px solid var(--border); font-size: .82rem;
+    }
+    .ps-game-row.done-win  { border-left: 3px solid var(--green); }
+    .ps-game-row.done-loss { border-left: 3px solid var(--red); }
+    .ps-game-row.sched     { opacity: .72; }
+    .ps-g-no   { font-size: .72rem; color: var(--muted); font-weight: 700; }
+    .ps-g-score{ font-weight: 800; white-space: nowrap; }
+    /* ブラケット */
+    .ps-bracket-cols {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    }
+    .ps-bracket-ws { margin-top: 14px; }
+    .ps-round-block { margin-bottom: 14px; }
+    .ps-round-label {
+      font-size: .72rem; font-weight: 700; color: var(--muted);
+      letter-spacing: .06em; margin-bottom: 6px; text-transform: uppercase;
+    }
+    .ps-matchup {
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; margin-bottom: 8px;
+    }
+    .ps-matchup.has-dodgers { border-color: rgba(239,178,30,.5); background: rgba(0,48,135,.12); }
+    .ps-team-line {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: .82rem; padding: 2px 0;
+    }
+    .ps-team-line.winner { font-weight: 800; }
+    .ps-team-line.winner .ps-wins { color: var(--gold); }
+    .ps-team-name.dodgers { color: var(--gold); font-weight: 800; }
+    .ps-team-name.tbd { color: var(--muted); font-style: italic; }
+    .ps-wins { font-weight: 800; color: var(--text); min-width: 18px; text-align: right; }
+    @media (max-width: 620px) {
+      .ps-bracket-cols { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -527,6 +592,24 @@
         <div class="sb-sub">WHIP</div>
       </div>
     </div>
+  </div>
+
+  <!-- ══ POSTSEASON（ポストシーズン中のみ表示） ══ -->
+  <div id="postseasonSection" style="display:none">
+    <!-- A. ドジャースのシリーズ状況 -->
+    <p class="section-title" style="margin-top:4px">🔥 ポストシーズン — ドジャース</p>
+    <div class="standings-card" id="psSeriesCard">
+      <span style="font-size:.78rem;color:var(--muted)">読み込み中…</span>
+    </div>
+
+    <!-- B. 大谷のポストシーズン成績 -->
+    <p class="section-title" style="margin-top:24px">⚾ 大谷翔平 ポストシーズン成績</p>
+    <div class="cards-grid" id="psBattingCards"></div>
+    <div class="cards-grid" id="psPitchingCards" style="margin-top:14px"></div>
+
+    <!-- C. 全体ブラケット -->
+    <p class="section-title" style="margin-top:24px">🏆 ポストシーズン ブラケット</p>
+    <div id="psBracket"></div>
   </div>
 
   <!-- 最新試合 打席結果 -->
@@ -1488,6 +1571,276 @@ async function refreshALRankings() {
 }
 
 /* ══════════════════════════════════════
+   POSTSEASON（ポストシーズン）
+══════════════════════════════════════ */
+const PS_ROUND_JA = {
+  'NL Wild Card Series':    { name:'NL ワイルドカードシリーズ',       tag:'WC', best:3 },
+  'AL Wild Card Series':    { name:'AL ワイルドカードシリーズ',       tag:'WC', best:3 },
+  'NL Division Series':     { name:'NL 地区シリーズ',                 tag:'DS', best:5 },
+  'AL Division Series':     { name:'AL 地区シリーズ',                 tag:'DS', best:5 },
+  'NL Championship Series': { name:'NL リーグ優勝決定シリーズ',       tag:'CS', best:7 },
+  'AL Championship Series': { name:'AL リーグ優勝決定シリーズ',       tag:'CS', best:7 },
+  'World Series':           { name:'ワールドシリーズ',                tag:'WS', best:7 },
+};
+const PS_ROUND_ORDER = ['Wild Card Series', 'Division Series', 'Championship Series', 'World Series'];
+
+// プレースホルダー（"NL Higher Seed" 等）は未定として null を返す
+function psTeamJa(name) {
+  if (!name) return null;
+  if (/Seed|Champion|Winner|TBD/i.test(name)) return null;
+  return MLB_TEAM_JA[name] ?? MLB_TEAM_JA[name.split(' ').slice(-1)[0]] ?? name;
+}
+
+// 全ポストシーズン試合を取得
+async function fetchPostseason(year) {
+  try {
+    const res = await fetchWithTimeout(
+      `${MLB_BASE}/schedule/postseason?season=${year}&sportId=1&hydrate=team,linescore`, 7000);
+    const d = await res.json();
+    const games = [];
+    for (const dt of (d.dates ?? [])) for (const g of (dt.games ?? [])) {
+      if (g.seriesDescription) games.push(g);
+    }
+    return games;
+  } catch(e) { console.warn('postseason fetch failed:', e.message); return []; }
+}
+
+// 大谷のポストシーズン成績（gameType=P）
+async function fetchOhtaniPostseason(year) {
+  const one = async group => {
+    try {
+      const res = await fetchWithTimeout(
+        `${MLB_BASE}/people/${MLB_ID}/stats?stats=season&season=${year}&group=${group}&sportId=1&gameType=P`, 6000);
+      const d = await res.json();
+      return d.stats?.[0]?.splits?.[0]?.stat ?? null;
+    } catch { return null; }
+  };
+  const [bat, pit] = await Promise.all([one('hitting'), one('pitching')]);
+  return { bat, pit };
+}
+
+// 試合群を「ラウンド × 対戦カード(チームIDペア)」でシリーズに分割
+function groupSeries(games) {
+  const map = new Map();
+  for (const g of games) {
+    const a = g.teams?.away?.team, h = g.teams?.home?.team;
+    if (!a || !h) continue;
+    const key = g.seriesDescription + '|' + [a.id, h.id].sort((x,y)=>x-y).join('-');
+    if (!map.has(key)) {
+      map.set(key, { desc:g.seriesDescription, games:[], best:(PS_ROUND_JA[g.seriesDescription]?.best ?? g.gamesInSeries ?? 7) });
+    }
+    map.get(key).games.push(g);
+  }
+  const series = [];
+  for (const s of map.values()) {
+    s.games.sort((x,y) => (x.seriesGameNumber ?? 0) - (y.seriesGameNumber ?? 0));
+    const teams = {};
+    for (const g of s.games) {
+      for (const side of ['away','home']) {
+        const t = g.teams[side].team;
+        teams[t.id] = teams[t.id] ?? { id:t.id, name:t.name, wins:0 };
+        if (g.teams[side].isWinner) teams[t.id].wins++;
+      }
+    }
+    s.teams = Object.values(teams).sort((a,b) => b.wins - a.wins);
+    series.push(s);
+  }
+  return series;
+}
+
+function psRoundIdx(desc) { return PS_ROUND_ORDER.findIndex(r => desc.includes(r)); }
+
+// ドジャースが戦っている最新ラウンドのシリーズ
+function dodgersSeries(allSeries) {
+  const mine = allSeries.filter(s => s.teams.some(t => t.id === DODGERS_ID));
+  if (!mine.length) return null;
+  mine.sort((a,b) => psRoundIdx(a.desc) - psRoundIdx(b.desc));
+  return mine[mine.length - 1];
+}
+
+function psShort(name) {
+  return MLB_TEAM_JA[name] ?? MLB_TEAM_JA[(name ?? '').split(' ').slice(-1)[0]] ?? name ?? '—';
+}
+
+// A. ドジャースのシリーズ状況カード
+function renderPSSeries(series) {
+  const el = document.getElementById('psSeriesCard');
+  if (!el) return;
+  const info = PS_ROUND_JA[series.desc] ?? { name:series.desc, tag:'', best:series.best };
+  const lad = series.teams.find(t => t.id === DODGERS_ID);
+  const opp = series.teams.find(t => t.id !== DODGERS_ID);
+  const clinch = Math.ceil(info.best / 2);
+  const lw = lad?.wins ?? 0, ow = opp?.wins ?? 0;
+  const isWS = series.desc === 'World Series';
+
+  let stCls = 'ps-st-even', stTxt = 'タイ';
+  if (lw >= clinch)       { stCls = 'ps-st-win'; stTxt = isWS ? '🏆 世界一！' : '突破'; }
+  else if (ow >= clinch)  { stCls = 'ps-st-out'; stTxt = '敗退'; }
+  else if (lw === clinch - 1 && lw > ow) { stCls = 'ps-st-lead'; stTxt = '王手'; }
+  else if (lw > ow)       { stCls = 'ps-st-lead'; stTxt = 'リード'; }
+  else if (lw < ow)       { stCls = 'ps-st-out';  stTxt = 'ビハインド'; }
+
+  const oppJa = opp ? psShort(opp.name) : '—';
+
+  const gameRows = series.games.map(g => {
+    const isHome = g.teams.home.team.id === DODGERS_ID;
+    const ladSide = isHome ? g.teams.home : g.teams.away;
+    const oppSide = isHome ? g.teams.away : g.teams.home;
+    const state = g.status?.abstractGameState ?? 'Preview';
+    const gd = g.gameDate ? new Date(g.gameDate) : null;
+    const dateStr = gd ? gd.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric'}) : '—';
+    const vs = `${isHome ? 'vs' : '@'} ${esc(psShort(oppSide.team.name))}`;
+    const no = `第${g.seriesGameNumber ?? '?'}戦`;
+
+    if (state === 'Final') {
+      const win = ladSide.isWinner;
+      const badge = win ? '<span class="result-badge result-win">勝</span>'
+                        : '<span class="result-badge result-loss">負</span>';
+      return `<div class="ps-game-row ${win?'done-win':'done-loss'}">
+        <span class="ps-g-no">${no}</span>
+        <span>${esc(dateStr)}　${vs}</span>
+        <span class="ps-g-score">${+ladSide.score||0} - ${+oppSide.score||0} ${badge}</span>
+      </div>`;
+    }
+    if (state === 'Live') {
+      return `<div class="ps-game-row">
+        <span class="ps-g-no">${no}</span>
+        <span>${esc(dateStr)}　${vs}</span>
+        <span class="ps-g-score">${+ladSide.score||0} - ${+oppSide.score||0} <span class="result-badge" style="background:rgba(239,178,30,.2);color:var(--gold)">試合中</span></span>
+      </div>`;
+    }
+    const timeStr = gd ? gd.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}) : '';
+    return `<div class="ps-game-row sched">
+      <span class="ps-g-no">${no}</span>
+      <span>${esc(dateStr)}　${vs}</span>
+      <span class="ps-g-score" style="color:var(--muted)">${esc(timeStr)} 予定</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="ps-series-head">
+      <span class="ps-round-name">${esc(info.name)}</span>
+      <span class="ps-round-tag">${esc(info.tag)}</span>
+      <span class="ps-series-score">${esc(oppJa)} 戦　${lw} - ${ow}
+        <span class="ps-series-status ${stCls}">${stTxt}</span>
+      </span>
+    </div>
+    <div style="font-size:.72rem;color:var(--muted)">${info.best}戦${clinch}勝制　（★=ドジャース視点の勝敗）</div>
+    <div class="ps-games">${gameRows || '<span style="font-size:.78rem;color:var(--muted)">試合情報なし</span>'}</div>`;
+}
+
+// B. 大谷のポストシーズン成績カード
+function psStatCards(elId, arr) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = arr.map(s => `
+    <div class="stat-card postseason">
+      <div class="card-header"><div class="card-label">${esc(s.label)}</div></div>
+      <div class="card-value postseason">${esc(String(s.value ?? '—'))}</div>
+      <div class="card-sub">${esc(String(s.sub ?? ''))}</div>
+    </div>`).join('');
+}
+
+function renderPSStats({ bat, pit }) {
+  const batEl = document.getElementById('psBattingCards');
+  const pitEl = document.getElementById('psPitchingCards');
+  if (bat) {
+    psStatCards('psBattingCards', [
+      { label:'打率',   value: bat.avg,      sub:`${bat.gamesPlayed ?? 0}試合` },
+      { label:'本塁打', value: bat.homeRuns, sub:'HR' },
+      { label:'打点',   value: bat.rbi,      sub:'RBI' },
+      { label:'安打',   value: bat.hits,     sub:`${bat.atBats ?? 0}打数` },
+      { label:'OPS',    value: bat.ops,      sub:'出塁+長打' },
+    ]);
+  } else if (batEl) {
+    batEl.innerHTML = '<div style="font-size:.8rem;color:var(--muted);padding:4px 2px">まだポストシーズンでの打席がありません</div>';
+  }
+  if (pit && (+(pit.inningsPitched ?? 0) > 0 || (pit.gamesPlayed ?? 0) > 0)) {
+    psStatCards('psPitchingCards', [
+      { label:'防御率', value: pit.era,            sub:'ERA' },
+      { label:'勝敗',   value: `${pit.wins ?? 0}-${pit.losses ?? 0}`, sub:'W-L' },
+      { label:'投球回', value: pit.inningsPitched, sub:'IP' },
+      { label:'奪三振', value: pit.strikeOuts,     sub:'SO' },
+      { label:'WHIP',   value: pit.whip,           sub:'1投球回あたり' },
+    ]);
+  } else if (pitEl) {
+    pitEl.innerHTML = '';
+  }
+}
+
+// C. 全体ブラケット
+function psMatchupHtml(series) {
+  const info = PS_ROUND_JA[series.desc] ?? { best:series.best };
+  const clinch = Math.ceil((info.best ?? 7) / 2);
+  const hasDod = series.teams.some(t => t.id === DODGERS_ID);
+  const lines = series.teams.map(t => {
+    const ja = psTeamJa(t.name);
+    const isDod = t.id === DODGERS_ID;
+    const isWinner = t.wins >= clinch;
+    const nameCls = isDod ? 'ps-team-name dodgers' : (ja ? 'ps-team-name' : 'ps-team-name tbd');
+    const disp = ja ?? '未定';
+    return `<div class="ps-team-line ${isWinner?'winner':''}">
+      <span class="${nameCls}">${esc(disp)}${isWinner?' 👑':''}</span>
+      <span class="ps-wins">${ja ? t.wins : '–'}</span>
+    </div>`;
+  }).join('');
+  return `<div class="ps-matchup ${hasDod?'has-dodgers':''}">${lines}</div>`;
+}
+
+function renderPSBracket(allSeries) {
+  const el = document.getElementById('psBracket');
+  if (!el) return;
+  const roundBlock = (descKeys, labels) => descKeys.map((desc, i) => {
+    const ss = allSeries.filter(s => s.desc === desc);
+    if (!ss.length) return '';
+    return `<div class="ps-round-block">
+      <div class="ps-round-label">${esc(labels[i])}</div>
+      ${ss.map(psMatchupHtml).join('')}
+    </div>`;
+  }).join('');
+
+  const nlCol = roundBlock(
+    ['NL Wild Card Series','NL Division Series','NL Championship Series'],
+    ['ワイルドカード','地区シリーズ','リーグ優勝決定シリーズ']);
+  const alCol = roundBlock(
+    ['AL Wild Card Series','AL Division Series','AL Championship Series'],
+    ['ワイルドカード','地区シリーズ','リーグ優勝決定シリーズ']);
+  const ws = allSeries.filter(s => s.desc === 'World Series');
+
+  el.innerHTML = `
+    <div class="ps-bracket-cols">
+      <div><div class="ps-round-label" style="color:#58a6ff;font-size:.8rem">⚾ ナショナル・リーグ</div>${nlCol}</div>
+      <div><div class="ps-round-label" style="color:#f85149;font-size:.8rem">⚾ アメリカン・リーグ</div>${alCol}</div>
+    </div>
+    ${ws.length ? `<div class="ps-bracket-ws">
+      <div class="ps-round-label" style="color:var(--gold);font-size:.8rem">🏆 ワールドシリーズ</div>
+      ${ws.map(psMatchupHtml).join('')}
+    </div>` : ''}`;
+}
+
+// ポストシーズン全体をまとめて更新（データが無ければセクション非表示）
+async function refreshPostseason(year) {
+  const section = document.getElementById('postseasonSection');
+  if (!section) return;
+  try {
+    const [games, oh] = await Promise.all([fetchPostseason(year), fetchOhtaniPostseason(year)]);
+    if (!games.length) { section.style.display = 'none'; return; }
+    const allSeries = groupSeries(games);
+    const lad = dodgersSeries(allSeries);
+    const hasRealOpp = lad && lad.teams.some(t => t.id !== DODGERS_ID && psTeamJa(t.name) !== null);
+    if (!lad || !hasRealOpp) { section.style.display = 'none'; return; }
+
+    section.style.display = 'block';
+    renderPSSeries(lad);
+    renderPSStats(oh);
+    renderPSBracket(allSeries);
+  } catch(e) {
+    console.warn('refreshPostseason error:', e);
+    section.style.display = 'none';
+  }
+}
+
+/* ══════════════════════════════════════
    CARDS
 ══════════════════════════════════════ */
 function renderCards(id, stats, rankings = {}) {
@@ -2102,6 +2455,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
   fetchNextGame().then(renderNextGame);
+  refreshPostseason(year);
 
   // 日本人選手: ① data.json から即時表示 → ② MLB API で最新に上書き
   if (lastData?.jpPlayers?.batting?.length) {
@@ -2113,9 +2467,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   checkPageUpdate();
   setInterval(checkPageUpdate, 5 * 60 * 1000);
 
-  // 15分ごと: 打撃・投球成績カード + NL/ALランキングを軽量更新
+  // 15分ごと: 打撃・投球成績カード + NL/ALランキング + ポストシーズンを軽量更新
   setInterval(refreshStatsCards, 15 * 60 * 1000);
   setInterval(refreshALRankings, 15 * 60 * 1000);
+  setInterval(() => {
+    const yr = lastData?.currentSeason?.year ?? new Date().getFullYear();
+    refreshPostseason(yr);
+  }, 15 * 60 * 1000);
 
   // 1 時間ごとに全データ一括更新
   setInterval(async () => {
@@ -2132,6 +2490,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     fetchNextGame().then(renderNextGame);
     fetchAllJPStats(yr).then(renderJPStats);
     refreshALRankings();
+    refreshPostseason(yr);
   }, 60 * 60 * 1000);
 
 });
