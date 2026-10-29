@@ -1820,13 +1820,25 @@ function renderPSBracket(allSeries) {
     </div>` : ''}`;
 }
 
-// ポストシーズン全体をまとめて更新（データが無ければセクション非表示）
+// ポストシーズン全体をまとめて更新
+// 表示するのは「ポストシーズン進行中（Finalでない試合が残っている）」かつ
+// 「ドジャースが実際に出場している」場合のみ。
+// ・レギュラーシーズン中 … エンドポイントが空を返す → 非表示
+// ・ポストシーズン終了後（全試合Final） … 進行中でない → 自動で非表示
+// ・翌シーズンのポストシーズン開幕 … 予定/試合中の試合が出現 → 自動で再表示
+// → 年をまたいでも毎年同じスキームで動く（手動切替え不要）
 async function refreshPostseason(year) {
   const section = document.getElementById('postseasonSection');
   if (!section) return;
   try {
     const [games, oh] = await Promise.all([fetchPostseason(year), fetchOhtaniPostseason(year)]);
-    if (!games.length) { section.style.display = 'none'; return; }
+    // 進行中判定: Final/中止/延期 以外（＝予定・試合中）の試合が1つでもあるか
+    const inProgress = games.some(g => {
+      const abs = g.status?.abstractGameState ?? '';
+      const det = g.status?.detailedState ?? '';
+      return abs !== 'Final' && det !== 'Cancelled' && det !== 'Postponed';
+    });
+    if (!games.length || !inProgress) { section.style.display = 'none'; return; }
     const allSeries = groupSeries(games);
     const lad = dodgersSeries(allSeries);
     const hasRealOpp = lad && lad.teams.some(t => t.id !== DODGERS_ID && psTeamJa(t.name) !== null);
